@@ -362,7 +362,9 @@
                 return;
             }
             $input.prop('disabled', false).attr('placeholder', 'Start typing a store name, city or state…');
-            if (state.locations.length === 1) {
+            if (state.pendingShipTo && state.byShipTo[state.pendingShipTo]) {
+                select(state.byShipTo[state.pendingShipTo]);      // saved cart's store (nexcom-order.js)
+            } else if (state.locations.length === 1) {
                 select(state.locations[0]);
             } else {
                 setStatus(state.locations.length + ' stores available to you.', '');
@@ -397,6 +399,14 @@
     window.NexcomLocations = {
         getSelected: function () { return state.selected; },
         isLoaded: function () { return state.loaded; },
+        /** Pick a store by ship-to (e.g. from a saved cart). Waits for the list if it's still loading;
+         *  ignored if the store isn't on this person's list. */
+        selectByShipTo: function (shipTo) {
+            shipTo = String(shipTo || '');
+            if (!shipTo) return;
+            if (state.loaded) { if (state.byShipTo[shipTo]) select(state.byShipTo[shipTo]); }
+            else state.pendingShipTo = shipTo;
+        },
         reload: loadLocations
     };
 

@@ -961,7 +961,11 @@ function ensureMoqStyles() {
         '.moq-warn > b { display: block; margin-bottom: 4px; } .moq-warn-sub { font-size: 11px; margin-top: 6px; color: #b71c1c; }' +
         '.cart-line.moq-short { background: #fdecea; border-left: 4px solid #c62828; padding-left: 8px; }' +
         '.moq-short-msg { display: block; color: #c62828; font-size: 11px; font-weight: 700; margin-top: 2px; }' +
-        '.submit-order-btn:disabled { background: #bdbdbd !important; cursor: not-allowed; }'
+        '.submit-order-btn:disabled { background: #bdbdbd !important; cursor: not-allowed; }' +
+        '#cartRestored { background: #e8f4fd; border: 1px solid #9fd0f5; padding: 12px 14px; margin: 20px 30px -8px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 14px; }' +
+        '#cartRestored .cr-btns { display: flex; gap: 8px; }' +
+        '#cartRestored button { padding: 6px 12px; border-radius: 4px; cursor: pointer; font-weight: 600; }' +
+        '#cartRestored .cr-view { background: #2196F3; color: #fff; border: none; } #cartRestored .cr-over { background: #fff; color: #c62828; border: 1px solid #e0a0a0; }'
     ).appendTo('head');
 }
 
@@ -971,7 +975,63 @@ function ensureMoqStyles() {
 function updateCartBadge() {
     var totalQty = cart.reduce(function (s, i) { return s + i.quantity; }, 0);
     $('#cartBadge').text(totalQty).toggle(totalQty > 0);
+    saveCartLocal();
 }
+
+// ---------------------------------------------------------
+// Saved cart: kept in this browser for CART_SAVE_DAYS, per page and rep,
+// so a refresh, closed tab or crash doesn't lose the order. Same idea as
+// the AAFES apparel page. Cleared when the order is submitted.
+// ---------------------------------------------------------
+var CART_SAVE_DAYS = 7;
+function cartSaveKey() {
+    var email = '';
+    try { email = (JSON.parse(sessionStorage.getItem('salesPortalAuth')) || {}).email || ''; } catch (e) {}
+    return 'nexcomCart:' + CFG.orderType + ':' + String(email).toLowerCase();
+}
+function saveCartLocal() {
+    try {
+        if (!cart.length) { localStorage.removeItem(cartSaveKey()); return; }
+        localStorage.setItem(cartSaveKey(), JSON.stringify({
+            savedAt: Date.now(), cart: cart,
+            facilityId: $('#facilityId').val(), locationName: $('#locationName').val(),
+            beginShipDate: $('#beginShipDate').val(), shipByDate: $('#shipByDate').val()
+        }));
+    } catch (e) { /* storage full or blocked: the page still works, it just can't save */ }
+}
+function restoreCartLocal() {
+    var saved = null;
+    try { saved = JSON.parse(localStorage.getItem(cartSaveKey()) || 'null'); } catch (e) {}
+    if (!saved || !saved.cart || !saved.cart.length) return;
+    ensureMoqStyles();
+    if (Date.now() - (saved.savedAt || 0) > CART_SAVE_DAYS * 86400000) { try { localStorage.removeItem(cartSaveKey()); } catch (e) {} return; }
+    cart = saved.cart;
+    // The store is picked again from the rep's own list (nexcom-locations.js), so it's still checked.
+    if (saved.facilityId && window.NexcomLocations && NexcomLocations.selectByShipTo) NexcomLocations.selectByShipTo(saved.facilityId);
+    if (saved.beginShipDate && !$('#beginShipDate').val()) $('#beginShipDate').val(saved.beginShipDate);
+    if (saved.shipByDate && !$('#shipByDate').val()) $('#shipByDate').val(saved.shipByDate);
+    updateCartBadge();
+    var pieces = cart.reduce(function (s, i) { return s + (i.quantity || 0); }, 0);
+    var when = new Date(saved.savedAt);
+    $('#cartRestored').remove();
+    $('<div id="cartRestored">').html(
+        '<div><strong>🛒 Your cart was saved.</strong> We brought back the ' + cart.length + ' line' + (cart.length === 1 ? '' : 's') +
+        ' (' + pieces + ' pieces) you entered ' + when.toLocaleDateString() + ' at ' +
+        when.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) + '. Keep going, or start over.</div>' +
+        '<div class="cr-btns"><button type="button" onclick="openCart()" class="cr-view">View Cart</button>' +
+        '<button type="button" onclick="startOverCart()" class="cr-over">Start Over</button></div>'
+    ).insertBefore($('.rep-info-bar').first());
+}
+function startOverCart() {
+    if (!confirm('Empty the saved cart and start a new order?')) return;
+    cart = [];
+    updateCartBadge();
+    renderCartDrawer();
+    $('#cartRestored').remove();
+}
+// Store and dates are saved too, whenever they change.
+$(document).on('nexcom:locationSelected nexcom:locationCleared', function () { saveCartLocal(); });
+$(document).on('change', '#beginShipDate, #shipByDate', function () { saveCartLocal(); });
 function openCart() { renderCartDrawer(); $('#cartDrawer').addClass('open'); $('#cartOverlay').addClass('open'); }
 function closeCart() { $('#cartDrawer').removeClass('open'); $('#cartOverlay').removeClass('open'); }
 function removeCartItem(i) { cart.splice(i, 1); renderCartDrawer(); updateCartBadge(); }
@@ -1083,6 +1143,7 @@ $(document).ready(function () {
     document.title = CFG.customerLabel + ' - NEXCOM Ordering';
     if (CFG.logo) $('#programLogo').attr('src', CFG.logo);
     loadEverything();
+    restoreCartLocal();
 });
 
 // ===========================================================
