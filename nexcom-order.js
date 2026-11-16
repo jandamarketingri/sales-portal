@@ -266,6 +266,50 @@ function libraryEntries(list) {
                  keywords: ((a.label || '') + ' ' + (a.folder || '')).toLowerCase(), tag: 'Art Library' + (a.folder ? ' · ' + a.folder : '') };
     });
 }
+// ---------------------------------------------------------
+// Catalog designs (catalog-designs.js): ready-made art from the NEXCOM
+// catalogs. They show first in the Artwork box, only on the items they go on.
+// ---------------------------------------------------------
+var catalogArt = null;
+function catalogDesignList() {
+    if (catalogArt) return catalogArt;
+    var all = (window.CATALOG_DESIGNS || {})[CFG.orderType] || [];
+    catalogArt = all.map(function (d) {
+        return { id: d.id, label: d.label || '', source: 'catalog', img: d.img || [], th: d.th || '', styles: d.styles || null,
+                 tier: d.tier || '', loc: d.loc || 0, requestId: '',
+                 keywords: (d.id + ' ' + (d.label || '') + ' catalog').toLowerCase(),
+                 tag: d.tier ? 'Catalog · prints as ' + d.tier + ' Color, ' + d.loc + ' Loc' : 'Catalog design' };
+    });
+    return catalogArt;
+}
+/** Item number without the SVN/LNP prefix, e.g. "LNPPC06" → "PC06". */
+function styleCore(baseSKU) { return String(baseSKU || '').replace(/^(SVN|LNP)/i, '').toUpperCase(); }
+/** Catalog designs for one card: any apparel design on a garment card (its print option first), or the item's own designs. */
+function catalogArtFor(key) {
+    var list = catalogDesignList();
+    if (gridState[key]) {
+        var cur = gridState[key].tierKey;
+        var app = list.filter(function (d) { return d.tier; });
+        return app.filter(function (d) { return d.tier + '-' + d.loc === cur; }).concat(app.filter(function (d) { return d.tier + '-' + d.loc !== cur; }));
+    }
+    var hs = hardgoodState[key];
+    if (!hs || !hs.rec) return [];
+    var core = styleCore(hs.rec.baseSKU);
+    return list.filter(function (d) { return d.styles && d.styles.some(function (s) { return s.toUpperCase() === core; }); });
+}
+/** Picture for a design in the list and preview: the catalog's own, or the Art Library's. */
+function artThumb(a) { return !a ? '' : (a.th || (a.img && a.img[0]) || thumbFor(a.thumbId)); }
+function artThumbStyle(a) {
+    var t = artThumb(a);
+    return t ? 'background:#fff url(\'' + t + '\') center/contain no-repeat;' : 'background:#888;';
+}
+/** The catalog's print option for an apparel design, as the card's tier key ("1-2-2"), if the card has it. */
+function catalogTierKey(garmentType, art) {
+    if (!art || !art.tier || !gridGroups[garmentType]) return '';
+    var k = art.tier + '-' + art.loc;
+    return gridGroups[garmentType].tiers[k] ? k : '';
+}
+
 /** New art arrived: redo the list under whichever Artwork box is open, and re-check typed art #s. */
 function refreshOpenArtLists() {
     var $f = $('.art-input:focus');
@@ -419,6 +463,10 @@ function initGridCard(garmentType) {
 }
 
 function selectTier(garmentType, key) {
+    var art = gridState[garmentType].art;
+    if (art && art.source === 'catalog' && art.tier + '-' + art.loc !== key) {
+        clearArt(garmentType, 'Catalog design ' + art.id + ' prints as ' + art.tier + ' Color, ' + art.loc + ' Loc, so it was taken off. Pick a design for this print option.');
+    }
     gridState[garmentType].tierKey = key;
     $('#tierRow-' + garmentType + ' .tier-btn').removeClass('active');
     $('#tierRow-' + garmentType + ' .tier-btn[data-key="' + key + '"]').addClass('active');
@@ -458,13 +506,14 @@ function initArtComboFor(key) {
         if (hardgoodState[key]) hardgoodState[key].art = null;
         input.removeClass('confirmed invalid');
         $('#artError-' + key).hide();
-        var q = input.val().trim().toLowerCase();
-        if (!q) { $('#artDropdown-' + key).hide(); showArtPreview(key, null, false); return; }
+        var q = input.val().trim().toLowerCase().replace(/['’]/g, '');
+        if (!q) { showCatalogList(key); showArtPreview(key, null, false); return; }
         var words = q.split(/\s+/);
-        var matches = artIndex.filter(function (a) {
-            var hay = a.id.toLowerCase() + ' ' + a.label.toLowerCase() + ' ' + a.keywords;
+        var hit = function (a) {
+            var hay = (a.id.toLowerCase() + ' ' + a.label.toLowerCase() + ' ' + a.keywords).replace(/['’]/g, '');
             return words.every(function (w) { return hay.indexOf(w) !== -1; });
-        }).slice(0, 60);
+        };
+        var matches = catalogArtFor(key).filter(hit).slice(0, 80).concat(artIndex.filter(hit).slice(0, 60));
         artComboState[key].filtered = matches;
         artComboState[key].highlight = matches.length ? 0 : -1;
         renderArtDropdown(key);
@@ -486,7 +535,7 @@ function initArtComboFor(key) {
             var typed = input.val().trim().toLowerCase();
             if (!typed) return;
             // Typing an art # exactly (or the full "ID — Label" text) counts as picking it
-            var exact = artIndex.filter(function (a) {
+            var exact = catalogArtFor(key).concat(artIndex).filter(function (a) {
                 return a.id.toLowerCase() === typed || (a.id + ' — ' + a.label).toLowerCase() === typed;
             });
             if (exact.length) { selectArt(key, exact[0]); return; }   // approved requests are listed first
@@ -512,6 +561,43 @@ function initArtComboFor(key) {
         $(this).addClass('highlighted');
         showArtPreview(key, artComboState[key].filtered[i], false);
     });
+
+    // Catalog designs: clicking into an empty box lists this item's designs,
+    // and a button above the box says how many there are.
+    var n = catalogArtFor(key).length;
+    if (n) {
+        ensureCatalogStyles();
+        input.attr('placeholder', 'Click to see catalog designs, or type an art #…');
+        input.on('focus click', function () { if (!input.val().trim()) { showCatalogList(key); } });
+        input.closest('.art-picker-layout').before('<button type="button" class="cat-browse" onclick="browseCatalog(\'' + key + '\')">📖 Catalog designs for this item (' + n + ')</button>');
+    }
+}
+/** Open the list of this item's catalog designs under its Artwork box. */
+function showCatalogList(key) {
+    var list = catalogArtFor(key);
+    if (!list.length) { $('#artDropdown-' + key).hide(); return; }
+    artComboState[key].filtered = list;
+    artComboState[key].highlight = -1;
+    renderArtDropdown(key);
+}
+function browseCatalog(key) {
+    var input = $('#artInput-' + key);
+    if (artComboState[key].confirmed) { input.val('').removeClass('confirmed'); }
+    input.trigger('focus');
+    showCatalogList(key);
+}
+function ensureCatalogStyles() {
+    if (document.getElementById('catalogArtStyles')) return;
+    $('<style id="catalogArtStyles">').text(
+        '.cat-browse { display: inline-block; margin: 0 0 8px; padding: 5px 12px; border: 1px solid #d9c8ea; background: #faf7fd; color: #4a2e6b; border-radius: 14px; font-size: 13px; font-weight: 700; cursor: pointer; }' +
+        '.cat-browse:hover { background: #f1eaf7; border-color: #764ba2; }' +
+        '.art-group.cat { background: #f1eaf7; color: #4a2e6b; }' +
+        '.art-tag.cat { background: #e8f5e9; color: #2e7d32; }' +
+        '.art-option-thumb.cat { width: 56px; height: 56px; flex: 0 0 56px; }' +
+        '#artZoom .az-img.multi { flex-wrap: wrap; gap: 10px; padding: 10px; overflow-y: auto; }' +
+        '#artZoom .az-img.multi img { max-height: calc(92vh - 140px); max-width: calc(50% - 10px); }' +
+        '@media (max-width: 600px) { #artZoom .az-img.multi img { max-width: 100%; } }'
+    ).appendTo('head');
 }
 function renderArtDropdown(key) {
     var st = artComboState[key];
@@ -527,14 +613,16 @@ function renderArtDropdown(key) {
     var html = st.filtered.map(function (a, i) {
         var head = '';
         if (a.source && a.source !== lastSource) {
-            head = '<div class="art-group">' + (a.source === 'request' ? 'Approved art requests' : 'Art Library: proven designs') + '</div>';
+            head = '<div class="art-group' + (a.source === 'catalog' ? ' cat' : '') + '">' +
+                (a.source === 'catalog' ? 'Catalog designs' + (gridState[key] ? ' (any garment)' : ' for this item') :
+                 a.source === 'request' ? 'Approved art requests' : 'Art Library: proven designs') + '</div>';
             lastSource = a.source;
         }
-        var t = thumbFor(a.thumbId);
+        var t = artThumb(a), isCat = a.source === 'catalog';
         return head + '<div class="art-option' + (i === st.highlight ? ' highlighted' : '') + '" data-i="' + i + '">' +
-            '<div class="art-option-thumb" data-thumb="' + esc(a.thumbId || '') + '" style="' + thumbStyle(a.thumbId) + '">' + (t ? '' : '🖼️') + '</div>' +
+            '<div class="art-option-thumb' + (isCat ? ' cat' : '') + '"' + (isCat ? '' : ' data-thumb="' + esc(a.thumbId || '') + '"') + ' style="' + artThumbStyle(a) + '">' + (t ? '' : '🖼️') + '</div>' +
             '<div class="art-option-text"><div class="art-id">' + esc(a.id) + '</div><div class="art-desc">' + esc(a.label) + '</div>' +
-            (a.tag ? '<div class="art-tag' + (a.source === 'request' ? ' req' : '') + '">' + esc(a.tag) + '</div>' : '') + '</div></div>';
+            (a.tag ? '<div class="art-tag' + (a.source === 'request' ? ' req' : isCat ? ' cat' : '') + '">' + esc(a.tag) + '</div>' : '') + '</div></div>';
     }).join('');
     if (libLoadState === 'loading') html += '<div class="art-empty" style="font-size:12px;">Still loading the Art Library… more designs will appear in a moment.</div>';
     dd.html(html).show();
@@ -546,14 +634,14 @@ function showArtPreview(key, art, locked) {
     if (!art) { panel.removeClass('locked zoomable').removeData('art').removeAttr('title'); thumb.css('background', '#ddd').text('🖼️'); empty.show(); text.hide(); status.text(''); return; }
     panel.data('art', art).addClass('zoomable').attr('title', 'Click to see this design larger');
     empty.hide(); text.show();
-    var t = thumbFor(art.thumbId);
-    thumb.attr('data-thumb', art.thumbId || '');
+    var t = artThumb(art);
+    thumb.attr('data-thumb', art.source === 'catalog' ? '' : (art.thumbId || ''));
     if (t) thumb.css({ background: '#fff url(\'' + t + '\') center/contain no-repeat' }).text('');
     else thumb.css('background', '#607D8B').text('🖼️');
     $('#artPreviewId-' + key).text(art.id);
     $('#artPreviewDesc-' + key).text(art.label);
     panel.toggleClass('locked', locked);
-    status.text(locked ? 'Selected' : 'Previewing');
+    status.text((locked ? 'Selected' : 'Previewing') + (art.source === 'catalog' ? ' · catalog design' : ''));
 }
 // ---------------------------------------------------------
 // Larger view of a design: click the preview box under the Artwork search.
@@ -590,6 +678,14 @@ function openArtZoom(art) {
     var esc = function (t) { return String(t == null ? '' : t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); };
     $('#azTitle').text(art.id);
     $('#azSub').text([art.label, art.tag].filter(Boolean).join(' · '));
+    if (art.source === 'catalog') {   // the catalog's own pictures: the design, then the catalog's photo of it
+        ensureCatalogStyles();
+        $('#azImg').toggleClass('multi', art.img.length > 1).html(art.img.map(function (u) { return '<img src="' + esc(u) + '" alt="' + esc(art.id) + '">'; }).join(''));
+        $('#azNote').text('From the NEXCOM catalog.');
+        $('#artZoom').addClass('open'); artZoomId = null;
+        return;
+    }
+    $('#azImg').removeClass('multi');
     var small = thumbFor(art.thumbId);
     $('#azImg').html(small ? '<img class="lowres" src="' + esc(small) + '" alt="">' : '<span style="font-size:48px;color:#bbb;">🖼️</span>');
     $('#artZoom').addClass('open');
@@ -621,6 +717,25 @@ function selectArt(key, art) {
     $('#artLabel-' + key).text(art.id + ' — ' + art.label);
     $('#artDropdown-' + key).hide();
     showArtPreview(key, art, true);
+    // A catalog apparel design is printed a set way: switch the card to that print option.
+    if (gridState[key] && art.source === 'catalog') {
+        var tk = catalogTierKey(key, art);
+        if (tk && tk !== gridState[key].tierKey) {
+            selectTier(key, tk);
+            var t = gridGroups[key].tiers[tk];
+            $('#artPreviewStatus-' + key).text('Selected · print option set to ' + t.colorRange + ' Color, ' + t.locCount + ' Loc to match');
+        }
+    }
+}
+/** Empty the Artwork box (after a print option that doesn't fit the chosen catalog design). */
+function clearArt(key, message) {
+    artComboState[key].confirmed = null;
+    if (gridState[key]) gridState[key].art = null;
+    if (hardgoodState[key]) hardgoodState[key].art = null;
+    $('#artInput-' + key).val('').removeClass('confirmed invalid');
+    $('#artLabel-' + key).text('Select a design');
+    showArtPreview(key, null, false);
+    if (message) $('#artError-' + key).text(message).show();
 }
 
 // ---------------------------------------------------------
@@ -849,7 +964,7 @@ function addGridToCart(garmentType) {
                 sku: tier.skus[sz], rin: rinFor(tier.baseSKU, sz, tier.skus[sz]), size: sz, quantity: qty,
                 category: 'APPAREL', isCustom: true,
                 style: tier.baseSKU, styleDesc: tier.description,
-                color: st.color, artId: st.art ? st.art.id : '', artLabel: st.art ? st.art.label : '',
+                color: st.color, artId: st.art ? st.art.id : '', artLabel: st.art ? (st.art.source === 'catalog' ? 'Catalog design: ' : '') + st.art.label : '',
                 artRequestId: st.art && st.art.requestId ? st.art.requestId : '',
                 cost: costFor(tier.baseSKU, sz, tier.skus[sz], tier.prices[sz])
             });
@@ -917,7 +1032,7 @@ function addHardgoodToCart(key) {
         productName: rec.baseSKU, sku: rec.skus.OS || rec.baseSKU, rin: rinFor(rec.baseSKU, 'OS', rec.skus.OS || rec.baseSKU), size: 'OS', quantity: qty,
         category: rec.category, isCustom: rec.requiresArt,
         style: rec.baseSKU, styleDesc: rec.description,
-        color: st.color || '', artId: st.art ? st.art.id : '', artLabel: st.art ? st.art.label : '',
+        color: st.color || '', artId: st.art ? st.art.id : '', artLabel: st.art ? (st.art.source === 'catalog' ? 'Catalog design: ' : '') + st.art.label : '',
         artRequestId: st.art && st.art.requestId ? st.art.requestId : '',
         cost: costFor(rec.baseSKU, 'OS', rec.skus.OS || rec.baseSKU, rec.prices.OS || rec.prices.S)
     });
