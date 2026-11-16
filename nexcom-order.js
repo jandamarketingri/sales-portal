@@ -385,6 +385,7 @@ function renderGridCard(garmentType, group) {
         '  <div class="art-preview" id="artPreview-' + garmentType + '"><div class="art-preview-thumb" id="artPreviewThumb-' + garmentType + '">🖼️</div><div style="min-width:0;"><div class="art-preview-empty" id="artPreviewEmpty-' + garmentType + '">No design previewed yet</div><div id="artPreviewText-' + garmentType + '" style="display:none;"><div class="art-preview-id" id="artPreviewId-' + garmentType + '"></div><div class="art-preview-desc" id="artPreviewDesc-' + garmentType + '"></div><div class="art-preview-status" id="artPreviewStatus-' + garmentType + '"></div></div></div></div>' +
         '</div>' +
         '<div class="section-label" style="margin-top:14px;">Quantities</div>' +
+        '<div class="price-line-wrap" id="priceLine-' + garmentType + '"></div>' +
         '<div class="moq-line" id="moqLine-' + garmentType + '"></div>' +
         '<div class="size-grid">' + sizeInputs + '</div>' +
         '<div class="size-rins" id="sizeRins-' + garmentType + '"></div>' +
@@ -418,6 +419,7 @@ function updateTierLabel(garmentType) {
     var t = gridGroups[garmentType].tiers[gridState[garmentType].tierKey];
     $('#tierLabel-' + garmentType).text(t.colorRange + ' Color, ' + t.locCount + ' Loc');
     $('#moqLine-' + garmentType).html(moqLineHtml(t.baseSKU));
+    $('#priceLine-' + garmentType).html(priceLineHtml(t.baseSKU, 'S', t.skus.S, t.prices.S));
     updateGridRins(garmentType);
 }
 
@@ -763,6 +765,21 @@ function goToRinEntry(e) {
 
 // Unit cost for an item and size: the order template's Unit Cost (rin-data.js,
 // same as art-request orders), else the price column on the products sheet.
+/** NEXCOM retail for an item (rin-data.js, from the MSA). Same for every size; null if none on file. */
+function retailFor(style) {
+    var d = (window.RIN_DATA || {})[style];
+    if (!d) { var data = window.RIN_DATA || {}, k = Object.keys(data).filter(function (x) { return x.toUpperCase() === String(style || '').toUpperCase(); })[0]; d = k && data[k]; }
+    var hit = d && d.r ? d.r.filter(function (x) { return x[4] != null && x[4] !== ''; })[0] : null;
+    return hit ? Number(hit[4]) : null;
+}
+/** "Cost $9.04 ea · Retail $18.00" line under an item. */
+function priceLineHtml(style, size, sku, sheetPrice) {
+    var c = costFor(style, size, sku, sheetPrice), r = retailFor(style);
+    if (!c && r == null) return '';
+    return '<div class="price-line">' + (c ? 'Cost <b>$' + c.toFixed(2) + '</b> ea' : '') +
+        (c && r != null ? ' · ' : '') + (r != null ? 'Retail <b>$' + r.toFixed(2) + '</b>' : '') + '</div>';
+}
+
 function costFor(style, size, sku, sheetPrice) {
     var c = rinEntry(style, size, sku);
     if (c && c[2] != null && c[2] !== '') return Number(c[2]) || 0;
@@ -834,6 +851,7 @@ function renderHardgoodCard(rec, key) {
         '<div class="product-name">' + rec.baseSKU + '</div>' +
         '<div class="product-desc">' + rec.description + '</div>' +
         rinLineHtml(rec.baseSKU, [{ size: 'OS', sku: rec.skus.OS || rec.baseSKU }]) +
+        priceLineHtml(rec.baseSKU, 'OS', rec.skus.OS || rec.baseSKU, rec.prices && rec.prices.OS) +
         moqLineHtml(rec.baseSKU) +
         colorBlock + artBlock +
         '<div class="section-label" style="margin-top:14px;">Quantity</div>' +
@@ -937,6 +955,7 @@ function ensureMoqStyles() {
         '.moq-line:empty { display: none; } .moq-line .moq-line { margin: 0; }' +
         '.moq-badge { display: inline-block; background: #f1eaf7; color: #4a2e6b; border: 1px solid #d9c8ea; border-radius: 12px; padding: 3px 10px; font-size: 13px; font-weight: 700; }' +
         '.moq-note { font-size: 12px; color: #666; }' +
+        '.price-line { font-size: 13px; color: #444; margin: 4px 0 2px; } .price-line b { color: #222; }' +
         '.moq-warn { background: #fff4e5; border: 1px solid #f0b46a; color: #7a4a00; border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; font-size: 13px; }' +
         '.moq-warn > b { display: block; margin-bottom: 4px; } .moq-warn-sub { font-size: 11px; margin-top: 6px; color: #8a5a10; }'
     ).appendTo('head');

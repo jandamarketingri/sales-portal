@@ -1935,6 +1935,11 @@ function minimumFor(cat) {
 }
 // Catalog minimums (moq-data.js). Apparel on one sketch is pooled: the catalog lets
 // garments and colors be mixed to reach the minimum when the art is the same size.
+/** NEXCOM retail for a style (rin-data.js, from the MSA), or null. */
+function retailOf(style) {
+    var d = (window.RIN_DATA || {})[style], hit = d && d.r ? d.r.filter(function (x) { return x[4] != null && x[4] !== ''; })[0] : null;
+    return hit ? Number(hit[4]) : null;
+}
 function moqSafe(style) { return typeof moqFor === 'function' ? moqFor(style) : null; }
 function moqChipHtml(style) { var m = moqSafe(style); return m ? '<span class="moq-chip">MOQ ' + m.q + '</span>' : ''; }
 function sketchMoqQty($card, key) {
@@ -2003,6 +2008,7 @@ function updateRowQty($row) {
     }
     $t.html('<b>' + q.qty + '</b> pcs' + (q.qty && q.priced ? ' · <b>' + money(q.cost) + '</b>' : '') +
         (c !== '' && c != null ? '<span class="min">' + money(+c) + ' each</span>' : '<span class="min">No price on file</span>') +
+        (retailOf(st) != null ? '<span class="min">Retail ' + money(retailOf(st)) + '</span>' : '') +
         (min && !moq ? '<span class="min' + (q.qty && q.qty < min ? ' bad' : '') + '">Minimum ' + min + '</span>' : '') + moqHtml);
 }
 function orderTotals() {
