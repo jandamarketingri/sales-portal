@@ -271,11 +271,20 @@ function libraryEntries(list) {
 // catalogs. They show first in the Artwork box, only on the items they go on.
 // ---------------------------------------------------------
 var catalogArt = null;
+// The ERP needs the licensing suffix on catalog art #s: _XX for Souvenirs, _NY for Local Navy Pride.
+// (A page can set its own with NEXCOM_CONFIG.artSuffix.)
+function catalogArtSuffix() { return CFG.artSuffix || { souvenirs: '_XX', 'navy-pride': '_NY' }[CFG.orderType] || ''; }
+/** Art # as it goes on the order: the catalog number with the suffix, once (e.g. "BAT-4484_NY"). */
+function erpArtId(id) {
+    var sfx = catalogArtSuffix();
+    id = String(id || '');
+    return !sfx || !id || /_[A-Z]{2}$/i.test(id) ? id : id + sfx;
+}
 function catalogDesignList() {
     if (catalogArt) return catalogArt;
     var all = (window.CATALOG_DESIGNS || {})[CFG.orderType] || [];
     catalogArt = all.map(function (d) {
-        return { id: d.id, label: d.label || '', source: 'catalog', img: d.img || [], th: d.th || '', styles: d.styles || null,
+        return { id: d.id, erpId: erpArtId(d.id), label: d.label || '', source: 'catalog', img: d.img || [], th: d.th || '', styles: d.styles || null,
                  tier: d.tier || '', loc: d.loc || 0, requestId: '',
                  keywords: (d.id + ' ' + (d.label || '') + ' catalog').toLowerCase(),
                  tag: d.tier ? 'Catalog · prints as ' + d.tier + ' Color, ' + d.loc + ' Loc' : 'Catalog design' };
@@ -536,7 +545,7 @@ function initArtComboFor(key) {
             if (!typed) return;
             // Typing an art # exactly (or the full "ID — Label" text) counts as picking it
             var exact = catalogArtFor(key).concat(artIndex).filter(function (a) {
-                return a.id.toLowerCase() === typed || (a.id + ' — ' + a.label).toLowerCase() === typed;
+                return a.id.toLowerCase() === typed || (a.id + ' — ' + a.label).toLowerCase() === typed || (a.erpId && a.erpId.toLowerCase() === typed);
             });
             if (exact.length) { selectArt(key, exact[0]); return; }   // approved requests are listed first
             input.addClass('invalid');
@@ -964,7 +973,7 @@ function addGridToCart(garmentType) {
                 sku: tier.skus[sz], rin: rinFor(tier.baseSKU, sz, tier.skus[sz]), size: sz, quantity: qty,
                 category: 'APPAREL', isCustom: true,
                 style: tier.baseSKU, styleDesc: tier.description,
-                color: st.color, artId: st.art ? st.art.id : '', artLabel: st.art ? (st.art.source === 'catalog' ? 'Catalog design: ' : '') + st.art.label : '',
+                color: st.color, artId: st.art ? (st.art.erpId || st.art.id) : '', artLabel: st.art ? (st.art.source === 'catalog' ? 'Catalog design: ' : '') + st.art.label : '',
                 artRequestId: st.art && st.art.requestId ? st.art.requestId : '',
                 cost: costFor(tier.baseSKU, sz, tier.skus[sz], tier.prices[sz])
             });
@@ -1032,7 +1041,7 @@ function addHardgoodToCart(key) {
         productName: rec.baseSKU, sku: rec.skus.OS || rec.baseSKU, rin: rinFor(rec.baseSKU, 'OS', rec.skus.OS || rec.baseSKU), size: 'OS', quantity: qty,
         category: rec.category, isCustom: rec.requiresArt,
         style: rec.baseSKU, styleDesc: rec.description,
-        color: st.color || '', artId: st.art ? st.art.id : '', artLabel: st.art ? (st.art.source === 'catalog' ? 'Catalog design: ' : '') + st.art.label : '',
+        color: st.color || '', artId: st.art ? (st.art.erpId || st.art.id) : '', artLabel: st.art ? (st.art.source === 'catalog' ? 'Catalog design: ' : '') + st.art.label : '',
         artRequestId: st.art && st.art.requestId ? st.art.requestId : '',
         cost: costFor(rec.baseSKU, 'OS', rec.skus.OS || rec.baseSKU, rec.prices.OS || rec.prices.S)
     });
@@ -1232,7 +1241,10 @@ function submitOrder() {
         beginShipDate: $('#beginShipDate').val(),
         shipByDate: $('#shipByDate').val(),
         orderDate: new Date().toISOString(),
-        items: cart
+        // Catalog art #s get the licensing suffix (also fixes lines from a cart saved before it was added).
+        items: cart.map(function (it) {
+            return /^Catalog design/.test(it.artLabel || '') ? $.extend({}, it, { artId: erpArtId(it.artId) }) : it;
+        })
     };
 
     if (!CFG.orderSubmissionUrl) {
