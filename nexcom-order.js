@@ -200,10 +200,19 @@ function buildProducts(rows) {
             var g = gridGroups[rec.garmentType] || (gridGroups[rec.garmentType] = { label: garmentLabel(rec.garmentType), tiers: {} });
             g.tiers[rec.colorRange + '-' + rec.locCount] = rec;
         } else {
+            rec.skus.OS = erpSku(rec.skus.S || rec.baseSKU);   // the one SKU an order line sends
             hardgoods.push(rec);
             if (!seenCategories[rec.category]) { seenCategories[rec.category] = true; categories.push(rec.category); }
         }
     }
+}
+
+// SKUs as the ERP has them, where the products sheet spells them another way.
+// The ERP takes no spaces and at most 15 characters.
+var ERP_SKU_FIX = { 'SVN024-6146 ASST': 'SVN024-6146-AST', 'LNP024-6146 ASST': 'LNP024-6146-AST' };
+function erpSku(sku) {
+    sku = String(sku || '').trim();
+    return ERP_SKU_FIX[sku.toUpperCase()] || sku;
 }
 
 function garmentLabel(key) {
