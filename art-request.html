@@ -534,7 +534,7 @@
         .qty-total .min { display: block; font-size: 11px; }
         .qty-total .min.bad { color: var(--error); font-weight: 600; }
         .qty-total .min.moq { font-weight: 700; color: #3a4a9a; }
-        .qty-total .min.moq.short { color: #a15c00; }
+        .qty-total .min.moq.short { color: var(--error); }
         .moq-chip { font-size: 10px; font-weight: 700; padding: 1px 7px; border-radius: 8px; background: #fff1dc; color: #8a5200; }
         .rv-moq { background: #fff4e5; border: 1px solid #f0b46a; color: #7a4a00; border-radius: 8px; padding: 10px 12px; margin-top: 10px; font-size: 13px; }
         .qty-wrap.field-error-box { border-color: #e57373; background: var(--error-bg); }
@@ -903,7 +903,7 @@ var PRODUCTION_DAYS    = 20;  // business days (~4 weeks, per Krystal)
 var TRANSIT_DAYS       = 5;   // business days shipping to the store
 
 // ── Item catalog ──────────────────────────────────────────────────────────────
-// Items come from the same published CSVs the Souvenirs / Navy Pride order
+// Items come from the same published CSVs the Souvenirs / Local Navy Pride order
 // pages use (the "Souveniers" and "Local Navy Pride" tabs of All Items).
 // If a URL is blank or the fetch fails, the built-in list below is used.
 var CATALOG_CSV = {
@@ -2003,7 +2003,8 @@ function updateRowQty($row) {
     var c = $row.find('.js-qty').first().data('cost'), moqHtml = '';
     if (moq) {
         var g = sketchMoqQty($row.closest('.sketch-card'), moq.key), pooled = g.rows > 1;
-        moqHtml = '<span class="min moq' + (g.qty && g.qty < moq.q ? ' short' : '') + '">Minimum ' + moq.q +
+        var isShort = g.qty && g.qty < moq.q;
+        moqHtml = '<span class="min moq' + (isShort ? ' short' : '') + '">' + (isShort ? 'Must meet the minimum of ' : 'Minimum ') + moq.q +
             (pooled ? ' · this sketch ' + g.qty : '') + (moq.note && !moq.apparel ? ' · ' + esc(moq.note) : '') + '</span>';
     }
     $t.html('<b>' + q.qty + '</b> pcs' + (q.qty && q.priced ? ' · <b>' + money(q.cost) + '</b>' : '') +
@@ -2189,6 +2190,19 @@ function validate() {
             if (q.bad) { $w.addClass('field-error-box'); errors.push(name + ': quantities must be whole numbers'); }
             else if (!q.qty) { $w.addClass('field-error-box'); errors.push(name + ': enter the quantity'); }
             else if (min && q.qty < min) { $w.addClass('field-error-box'); errors.push(name + ': the minimum is ' + min + ' (you have ' + q.qty + ')'); }
+        });
+        // Catalog minimums (moq-data.js) are required. Apparel on the sketch counts together.
+        var $card = $(this), told = {};
+        $card.find('.garment-row').each(function () {
+            var st = $(this).data('style'), m = moqSafe(st);
+            if (!m) return;
+            var g = sketchMoqQty($card, m.key);
+            if (!g.qty || g.qty >= m.q) return;
+            $(this).find('.qty-wrap').addClass('field-error-box');
+            if (told[m.key]) return;
+            told[m.key] = true;
+            errors.push('Sketch ' + n + ', ' + (m.apparel ? 'apparel (' + m.key.replace('APPAREL ', '') + ' colors)' : ((catalogByStyle[st] || {}).desc || st)) +
+                ': must meet the minimum of ' + m.q + ' (you have ' + g.qty + ', add ' + (m.q - g.qty) + ' more)');
         });
     });
 

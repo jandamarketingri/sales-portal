@@ -1,6 +1,6 @@
 // ==========================================================
 // NEXCOM ORDERING ENGINE
-// Shared by souvenirs.html and navy-pride.html.
+// Shared by souvenirs.html and navy-pride.html (Local Navy Pride).
 // Each shell page sets window.NEXCOM_CONFIG before loading this
 // file — that's the only thing that differs between the two.
 //
@@ -48,7 +48,7 @@ var SIZE_ORDER = ['S', 'M', 'L', 'XL', '2XL'];
 
 // ---------------------------------------------------------
 // Auth guard — same pattern as the hub pages. Gates on the
-// NEXCOM program, not on Souvenirs/Navy Pride individually;
+// NEXCOM program, not on Souvenirs/Local Navy Pride individually;
 // both sub-catalogs share one program-level permission today.
 // ---------------------------------------------------------
 function requireAuth() {
@@ -373,7 +373,7 @@ function renderGridCard(garmentType, group) {
 
     return '<div class="sku-card" data-garment="' + garmentType + '">' +
         '<div class="product-name">' + group.label + '</div>' +
-        '<div class="product-desc">' + CFG.prefix + ' Custom Print</div>' +
+        '<div class="product-desc">' + CFG.customerLabel + ' Custom Print</div>' +
         '<div class="rin-line" id="rinLine-' + garmentType + '"></div>' +
         '<div class="section-label">Print Complexity / Locations<span class="selected-value" id="tierLabel-' + garmentType + '"></span></div>' +
         '<div class="tier-row" id="tierRow-' + garmentType + '">' + pills + '</div>' +
@@ -923,6 +923,7 @@ function moqLineHtml(style) {
     return '<div class="moq-line"><span class="moq-badge">Minimum ' + m.q + (m.apparel ? ' per design' : '') + '</span>' +
         (m.note ? '<span class="moq-note">' + rinEsc(m.note) + '</span>' : '') + '</div>';
 }
+function moqGroupKey(it, m) { return m.key + '|' + (it.artId || ''); }
 /** Cart groups below their minimum. Apparel lines with the same art and ink-color tier
  *  count together (garments and colors can be mixed); other items count per style and art. */
 function moqShortfalls() {
@@ -930,9 +931,9 @@ function moqShortfalls() {
     cart.forEach(function (it) {
         var m = moqSafe(it.style);
         if (!m) return;
-        var k = m.key + '|' + (it.artId || '');
+        var k = moqGroupKey(it, m);
         if (!groups[k]) {
-            groups[k] = { q: m.q, qty: 0, label: (m.apparel ? 'Apparel ' + m.key.replace('APPAREL ', '') + ' color' : String(it.styleDesc || it.productName).replace(/^(SVN|LNP)\s+/, '')) +
+            groups[k] = { key: k, q: m.q, qty: 0, label: (m.apparel ? 'Apparel ' + m.key.replace('APPAREL ', '') + ' color' : String(it.styleDesc || it.productName).replace(/^(SVN|LNP)\s+/, '')) +
                 (it.artId ? ' (art ' + it.artId + ')' : '') };
             order.push(k);
         }
@@ -943,9 +944,9 @@ function moqShortfalls() {
 function moqWarningsHtml() {
     var list = moqShortfalls();
     if (!list.length) return '';
-    return '<div class="moq-warn"><b>Below the minimum</b>' + list.map(function (g) {
-        return '<div>' + rinEsc(g.label) + ': <b>' + g.qty + '</b> of ' + g.q + '</div>';
-    }).join('') + '<div class="moq-warn-sub">Add more pieces, or the order may be sent back.</div></div>';
+    return '<div class="moq-warn"><b>Some items don\u2019t meet the minimum</b>' + list.map(function (g) {
+        return '<div>' + rinEsc(g.label) + ': <b>' + g.qty + '</b> of ' + g.q + ' (add ' + (g.q - g.qty) + ' more)</div>';
+    }).join('') + '<div class="moq-warn-sub">Each item must meet its minimum before the order can be submitted. Add more pieces, or remove the item.</div></div>';
 }
 function ensureMoqStyles() {
     if (document.getElementById('moqStyles')) return;
@@ -956,8 +957,11 @@ function ensureMoqStyles() {
         '.moq-badge { display: inline-block; background: #f1eaf7; color: #4a2e6b; border: 1px solid #d9c8ea; border-radius: 12px; padding: 3px 10px; font-size: 13px; font-weight: 700; }' +
         '.moq-note { font-size: 12px; color: #666; }' +
         '.price-line { font-size: 13px; color: #444; margin: 4px 0 2px; } .price-line b { color: #222; }' +
-        '.moq-warn { background: #fff4e5; border: 1px solid #f0b46a; color: #7a4a00; border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; font-size: 13px; }' +
-        '.moq-warn > b { display: block; margin-bottom: 4px; } .moq-warn-sub { font-size: 11px; margin-top: 6px; color: #8a5a10; }'
+        '.moq-warn { background: #fdecea; border: 1px solid #e57373; color: #b71c1c; border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; font-size: 13px; }' +
+        '.moq-warn > b { display: block; margin-bottom: 4px; } .moq-warn-sub { font-size: 11px; margin-top: 6px; color: #b71c1c; }' +
+        '.cart-line.moq-short { background: #fdecea; border-left: 4px solid #c62828; padding-left: 8px; }' +
+        '.moq-short-msg { display: block; color: #c62828; font-size: 11px; font-weight: 700; margin-top: 2px; }' +
+        '.submit-order-btn:disabled { background: #bdbdbd !important; cursor: not-allowed; }'
     ).appendTo('head');
 }
 
@@ -973,16 +977,22 @@ function closeCart() { $('#cartDrawer').removeClass('open'); $('#cartOverlay').r
 function removeCartItem(i) { cart.splice(i, 1); renderCartDrawer(); updateCartBadge(); }
 
 function renderCartDrawer() {
-    if (!cart.length) { $('#cartItems').html('<p style="color:#888;text-align:center;">Your cart is empty.</p>'); $('#cartTotalQty').text(0); return; }
+    if (!cart.length) { $('#cartItems').html('<p style="color:#888;text-align:center;">Your cart is empty.</p>'); $('#cartTotalQty').text(0); $('.submit-order-btn').prop('disabled', false); return; }
+    var short = {};
+    moqShortfalls().forEach(function (g) { short[g.key] = g; });
     var html = cart.map(function (item, i) {
-        return '<div class="cart-line">' +
+        var m = moqSafe(item.style), g = m && short[moqGroupKey(item, m)];
+        return '<div class="cart-line' + (g ? ' moq-short' : '') + '">' +
             '<div><b>' + item.productName + '</b><br>' +
+            (g ? '<span class="moq-short-msg">Must meet the minimum of ' + g.q + (m.apparel ? ' per design' : '') + ' (' + g.qty + ' in cart)</span>' : '') +
             '<span style="font-size:11px;color:#666;">' + (item.rin ? 'RIN: ' + item.rin + ' · ' : '') + 'SKU: ' + item.sku + ' · Size: ' + item.size + (item.color ? ' · Color: ' + item.color : '') + (item.artId ? ' · Art: ' + item.artId : '') + '</span></div>' +
             '<div style="display:flex;align-items:center;gap:10px;"><span style="text-align:right;">×' + item.quantity +
             '<br><span style="font-size:11px;color:#666;">' + (item.cost ? '$' + (item.cost * item.quantity).toFixed(2) : 'no price') + '</span></span><button onclick="removeCartItem(' + i + ')" style="background:none;border:none;color:#c62828;cursor:pointer;font-size:16px;">✕</button></div>' +
             '</div>';
     }).join('');
     $('#cartItems').html(moqWarningsHtml() + html);
+    $('.submit-order-btn').prop('disabled', moqShortfalls().length > 0)
+        .attr('title', moqShortfalls().length ? 'Every item must meet its minimum first' : '');
     $('#cartTotalQty').text(cart.reduce(function (s, i) { return s + i.quantity; }, 0) + ' · $' +
         cart.reduce(function (s, i) { return s + (i.cost || 0) * i.quantity; }, 0).toFixed(2));
 }
@@ -1000,10 +1010,11 @@ function submitOrder() {
         if (!$('#' + required[i]).val()) { alert('Please fill out all required header fields before submitting.'); closeCart(); return; }
     }
     if (!cart.length) { alert('Your cart is empty!'); return; }
-    var shortList = moqShortfalls();
-    if (shortList.length && !confirm('Some items are below the catalog minimum:\n\n' +
-        shortList.map(function (g) { return '• ' + g.label + ': ' + g.qty + ' of ' + g.q; }).join('\n') +
-        '\n\nSubmit the order anyway?')) return;
+    if (moqShortfalls().length) {   // minimums are required: show what's short, in red, in the cart
+        openCart();
+        $('#cartItems').scrollTop(0);
+        return;
+    }
 
     var authData = JSON.parse(sessionStorage.getItem('salesPortalAuth'));
     var orderData = {
