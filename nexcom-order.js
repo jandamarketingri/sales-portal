@@ -190,6 +190,13 @@ function buildProducts(rows) {
         };
 
         if (rec.productType === 'GRID_TEE') {
+            // The products sheet lists the 3-5 Color 1 Loc long sleeve as "-SM" under Small and
+            // nothing under Medium, so Medium couldn't be ordered. Use the item's own size SKUs.
+            var smallSku = String(rec.skus.S || '');
+            if (/-SM$/i.test(smallSku) && !rec.skus.M) {
+                rec.skus.S = rec.baseSKU + '-S';
+                rec.skus.M = rec.baseSKU + '-M';
+            }
             var g = gridGroups[rec.garmentType] || (gridGroups[rec.garmentType] = { label: garmentLabel(rec.garmentType), tiers: {} });
             g.tiers[rec.colorRange + '-' + rec.locCount] = rec;
         } else {
@@ -964,6 +971,9 @@ function addGridToCart(garmentType) {
     var tier = gridGroups[garmentType].tiers[st.tierKey];
     if (!st.color) { alert('Please select a garment color.'); return; }
     if (tier.requiresArt !== false && !st.art) { alert('Please select artwork.'); return; }
+    // A size with a quantity but no SKU would be left out without a word: stop and say so.
+    var noSku = SIZE_ORDER.filter(function (sz) { return (parseInt($('#qty-' + garmentType + '-' + sz).val()) || 0) > 0 && !tier.skus[sz]; });
+    if (noSku.length) { alert(noSku.join(', ') + ' isn\u2019t available for this item, so nothing was added. Please remove that quantity, or let the office know.'); return; }
     var addedAny = false;
     SIZE_ORDER.forEach(function (sz) {
         var qty = parseInt($('#qty-' + garmentType + '-' + sz).val()) || 0;
