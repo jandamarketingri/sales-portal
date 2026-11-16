@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
+<script src="aafes-switch.js"></script>
     <title>Sales Portal - Select Program</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
@@ -274,7 +275,7 @@ $(document).ready(function(){
         var userInfo = '<div style="position:fixed;top:20px;right:20px;background:white;padding:10px 20px;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.2);display:flex;gap:10px;align-items:center;z-index:1000;flex-wrap:wrap;">' +
             '<span style="color:#666;font-size:14px;">👤 ' + esc(auth.name) + portalRoleTag(auth.role) + '</span>' +
             '<a href="help.html" style="background:#28a745;color:white;padding:6px 12px;border-radius:4px;cursor:pointer;font-weight:600;text-decoration:none;font-size:14px;">🆘 Need Help</a>' +
-            '<a href="my-orders.html" id="myOrdersLink" style="background:#667eea;color:white;border:none;padding:6px 12px;border-radius:4px;cursor:pointer;font-weight:600;text-decoration:none;font-size:14px;">📋 My Orders</a>' +
+            '<a href="' + (aafesAllowed(auth) ? 'my-orders.html' : 'nexcom-orders.html') + '" id="myOrdersLink" style="background:#667eea;color:white;border:none;padding:6px 12px;border-radius:4px;cursor:pointer;font-weight:600;text-decoration:none;font-size:14px;">📋 My Orders</a>' +
             '<button onclick="logout()" style="background:#dc3545;color:white;border:none;padding:6px 12px;border-radius:4px;cursor:pointer;font-weight:600;">Logout</button>' +
             '</div>';
 
@@ -293,7 +294,7 @@ $(document).ready(function(){
         // Gate program cards to what this rep is actually approved for.
         // Admins see everything regardless of the Programs column.
         var programs = auth.programs || [];
-        var hasAAFES = isAdmin || programs.indexOf('AAFES') !== -1;
+        var hasAAFES = aafesAllowed(auth);   // aafes-switch.js: hidden from reps until go-live
         var hasNEXCOM = isAdmin || programs.indexOf('NEXCOM') !== -1;
 
         if (!hasAAFES) $('#aafesCard').remove();
