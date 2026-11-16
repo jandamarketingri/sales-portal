@@ -73,11 +73,15 @@ function requireAuth() {
 function renderTopBar(auth) {
     var bar = '<div style="position:fixed;top:20px;right:20px;background:white;padding:10px 20px;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.2);display:flex;gap:10px;align-items:center;z-index:1000;">' +
         '<span style="color:#666;font-size:14px;">👤 ' + auth.name + portalRoleTag(auth.role) + '</span>' +
+        '<button type="button" onclick="openCart()" style="background:#2e7d32;color:white;border:none;padding:6px 14px;border-radius:4px;cursor:pointer;font-weight:700;font-size:14px;">🛒 My Cart <span id="topCartBadge" style="display:inline-block;min-width:18px;margin-left:4px;padding:1px 7px;border-radius:10px;background:white;color:#2e7d32;font-size:12px;">0</span></button>' +
         '<a href="nexcom-hub.html" style="background:#667eea;color:white;padding:6px 12px;border-radius:4px;text-decoration:none;font-size:14px;font-weight:600;">⇄ NEXCOM Hub</a>' +
         '<a href="nexcom-orders.html" style="background:#764ba2;color:white;padding:6px 12px;border-radius:4px;text-decoration:none;font-size:14px;font-weight:600;">📋 My Orders</a>' +
         '<button onclick="logoutNexcom()" style="background:#dc3545;color:white;border:none;padding:6px 12px;border-radius:4px;cursor:pointer;font-weight:600;">Logout</button>' +
         '</div>';
     $('body').append(bar);
+    // A bigger cart button at the bottom right, too.
+    $('<style>').text('.cart-fab { padding: 18px 30px !important; font-size: 19px !important; bottom: 28px !important; right: 28px !important; }' +
+        '.cart-fab #cartBadge { font-size: 15px !important; }').appendTo('head');
 }
 function logoutNexcom() {
     if (confirm('Are you sure you want to log out?')) {
@@ -1147,6 +1151,7 @@ function ensureMoqStyles() {
 function updateCartBadge() {
     var totalQty = cart.reduce(function (s, i) { return s + i.quantity; }, 0);
     $('#cartBadge').text(totalQty).toggle(totalQty > 0);
+    $('#topCartBadge').text(totalQty);
     saveCartLocal();
 }
 
