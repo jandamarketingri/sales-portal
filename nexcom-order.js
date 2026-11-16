@@ -333,6 +333,10 @@ function categoryLabel(cat) {
     return labels[cat] || cat;
 }
 
+// Card key for a hardgood: letters and digits only, so it is safe in element ids and
+// selectors ("SACK / TOTE" → "SACK_TOTE-0"; spaces/slashes used to break the art picker).
+function hgKey(cat, idx) { return String(cat).replace(/[^A-Za-z0-9]+/g, '_') + '-' + idx; }
+
 function selectCategory(cat) {
     $('.cat-tab').removeClass('active');
     $('.cat-tab[data-cat="' + cat + '"]').addClass('active');
@@ -343,14 +347,14 @@ function selectCategory(cat) {
         });
     } else {
         hardgoods.filter(function (h) { return h.category === cat; }).forEach(function (h, idx) {
-            html += renderHardgoodCard(h, cat + '-' + idx);
+            html += renderHardgoodCard(h, hgKey(cat, idx));
         });
     }
     $('#catalog').html(html || '<p style="text-align:center;color:#888;">No products in this category yet.</p>');
     // Wire up interactive bits after DOM insert
     Object.keys(gridGroups).forEach(function (g) { if (cat === 'APPAREL') initGridCard(g); });
     if (cat !== 'APPAREL') {
-        hardgoods.filter(function (h) { return h.category === cat; }).forEach(function (h, idx) { initHardgoodCard(h, cat + '-' + idx); });
+        hardgoods.filter(function (h) { return h.category === cat; }).forEach(function (h, idx) { initHardgoodCard(h, hgKey(cat, idx)); });
     }
 }
 
@@ -876,10 +880,15 @@ function addHardgoodToCart(key) {
 }
 
 function flashAdded(key) {
-    var btn = $('.sku-card [onclick*="' + key + '"].add-btn, .sku-card [data-garment="' + key + '"] .add-btn');
-    var text = btn.text();
+    // Exact match only: one item's key can be part of another's (e.g. "GLASSWARE-1" in "GLASSWARE-10"),
+    // and a loose match used to flash several buttons and glue their labels together.
+    var btn = $('.sku-card .add-btn').filter(function () {
+        var on = this.getAttribute('onclick') || '';
+        return on === "addGridToCart('" + key + "')" || on === "addHardgoodToCart('" + key + "')";
+    });
+    clearTimeout(btn.data('flashTimer'));
     btn.text('✓ Added').css('background', '#2e7d32');
-    setTimeout(function () { btn.text(text).css('background', ''); }, 1000);
+    btn.data('flashTimer', setTimeout(function () { btn.text('Add to Cart').css('background', ''); }, 1000));
 }
 
 // ---------------------------------------------------------
