@@ -200,8 +200,17 @@ function buildProducts(rows) {
 }
 
 function garmentLabel(key) {
-    var labels = { TEE: 'Core Cotton Tee', LS: 'Long Sleeve Tee', MW: 'Moisture Wick Tee', FLC: 'Fleece Crewneck', HDY: 'Fleece Hoodie', MTNK: "Men's Tank", LTNK: "Ladies Tank" };
+    // NEXCOM's names (as on the MSA), with the garment in brackets where it helps.
+    var labels = { TEE: "Men's Tee (Core Cotton)", LS: "Men's Long Sleeve Tee", MW: "Men's Performance Tee (Moisture Wick)",
+                   FLC: "Men's Fleece Crew (Crewneck Sweatshirt)", HDY: "Men's Hoodie (Fleece Pullover)", MTNK: "Men's Tank", LTNK: "Ladies Tank" };
     return labels[key] || key;
+}
+/** Extra words the item finder matches for each garment (old names, everyday words). */
+function garmentWords(key) {
+    var w = { TEE: 'tee t-shirt shirt core cotton short sleeve', LS: 'long sleeve tee shirt core cotton', MW: 'performance moisture wick tee shirt dry',
+              FLC: 'fleece crew crewneck sweatshirt sweater', HDY: 'hoodie hoody hooded sweatshirt fleece pullover',
+              MTNK: 'tank top mens', LTNK: 'tank top womens women ladies' };
+    return w[key] || '';
 }
 
 // ---------------------------------------------------------
@@ -650,25 +659,32 @@ function updateGridRins(garmentType) {
 
 var rinIndex = [];
 function buildRinIndex() {
+    // One entry per size RIN, plus one per parent RIN (the whole item, every size).
+    // `text` is what a name search matches.
     rinIndex = [];
     Object.keys(gridGroups).forEach(function (g) {
         var group = gridGroups[g];
         Object.keys(group.tiers).forEach(function (k) {
             var t = group.tiers[k];
+            var label = group.label + ', ' + t.colorRange + ' Color ' + t.locCount + ' Loc';
+            var text = (label + ' ' + garmentWords(g) + ' ' + t.baseSKU + ' ' + (t.description || '') + ' apparel').toLowerCase();
+            rinIndex.push({ kind: 'grid', cat: 'APPAREL', garmentType: g, tierKey: k, size: '', sku: t.baseSKU,
+                            rin: parentRinFor(t.baseSKU), parent: true, label: label, sizeLabel: 'all sizes', text: text });
             SIZE_ORDER.forEach(function (sz) {
                 if (!t.skus[sz]) return;
                 rinIndex.push({ kind: 'grid', cat: 'APPAREL', garmentType: g, tierKey: k, size: sz, sku: t.skus[sz],
-                                rin: rinFor(t.baseSKU, sz, t.skus[sz]),
-                                label: group.label + ', ' + t.colorRange + ' Color ' + t.locCount + ' Loc', sizeLabel: sz });
+                                rin: rinFor(t.baseSKU, sz, t.skus[sz]), label: label, sizeLabel: sz, text: text });
             });
         });
     });
     var byCat = {};
     hardgoods.forEach(function (h) {
         var idx = byCat[h.category] = (byCat[h.category] === undefined ? 0 : byCat[h.category] + 1);
-        var sku = h.skus.OS || h.baseSKU;
-        rinIndex.push({ kind: 'hg', cat: h.category, key: h.category + '-' + idx, size: 'OS', sku: sku,
-                        rin: rinFor(h.baseSKU, 'OS', sku), label: h.description || h.baseSKU, sizeLabel: '' });
+        var sku = h.skus.OS || h.baseSKU, label = h.description || h.baseSKU;
+        var text = (label + ' ' + h.baseSKU + ' ' + categoryLabel(h.category) + ' ' + (h.keywords || '')).toLowerCase();
+        var parent = parentRinFor(h.baseSKU), rin = rinFor(h.baseSKU, 'OS', sku);
+        rinIndex.push({ kind: 'hg', cat: h.category, key: hgKey(h.category, idx), size: 'OS', sku: sku,
+                        rin: rin, label: label, sizeLabel: '', text: text, parentRin: parent });
     });
 }
 
@@ -697,30 +713,42 @@ function ensureRinFinder() {
             '.rin-flash { animation: rinFlash 1.6s ease-out; } @keyframes rinFlash { 0%,40% { box-shadow: 0 0 0 3px #764ba2; } 100% { box-shadow: 0 0 0 0 transparent; } }' +
             '@media (max-width: 480px) { .rin-find { margin-left: 14px; margin-right: 14px; } .sr-chip { font-size: 13px; } }' +
             '</style>');
-        $('.rep-info-bar').after('<div class="rin-find"><label for="rinFind">Find an item by RIN or SKU</label>' +
-            '<div class="rf-wrap"><input type="text" id="rinFind" autocomplete="off" inputmode="search"><div class="rf-list" id="rinFindList"></div></div>' +
+        $('.rep-info-bar').after('<div class="rin-find"><label for="rinFind">Find an item by RIN, parent RIN, SKU or name</label>' +
+            '<div class="rf-wrap"><input type="text" id="rinFind" autocomplete="off" inputmode="search" placeholder="e.g. 20439571, LNPHDY1-2-2 or hoodie"><div class="rf-list" id="rinFindList"></div></div>' +
             '<div class="rf-hint" id="rinFindHint"></div></div>');
         var st = { list: [], hl: -1 };
         var $in = $('#rinFind'), $dd = $('#rinFindList');
         var show = function () {
-            if (!st.list.length) { $dd.html('<div class="rf-empty">No item has that RIN or SKU.</div>').show(); return; }
+            if (!st.list.length) { $dd.html('<div class="rf-empty">No item matches that RIN, SKU or name.</div>').show(); return; }
             $dd.html(st.list.map(function (e, i) {
-                return '<div class="rf-opt' + (i === st.hl ? ' hl' : '') + '" data-i="' + i + '"><span class="rf-rin">' + rinEsc(e.rin || e.sku) + '</span> ' +
+                var head = e.rin ? (e.parent ? 'Parent RIN ' : '') + e.rin : e.sku;
+                var sub = [];
+                if (e.rin) sub.push((e.parent ? 'Style ' : 'SKU ') + e.sku);
+                else sub.push('No RIN yet');
+                if (e.parentRin && e.parentRin !== e.rin) sub.push('Parent RIN ' + e.parentRin);
+                sub.push(categoryLabel(e.cat));
+                return '<div class="rf-opt' + (i === st.hl ? ' hl' : '') + '" data-i="' + i + '"><span class="rf-rin">' + rinEsc(head) + '</span> ' +
                     rinEsc(e.label) + (e.sizeLabel ? ' · <b>' + rinEsc(e.sizeLabel) + '</b>' : '') +
-                    '<div class="rf-sub">' + (e.rin ? 'SKU ' + rinEsc(e.sku) : 'No RIN yet') + ' · ' + rinEsc(categoryLabel(e.cat)) + '</div></div>';
+                    '<div class="rf-sub">' + rinEsc(sub.join(' · ')) + '</div></div>';
             }).join('')).show();
         };
         $in.on('input', function () {
-            var q = $.trim($in.val()).toUpperCase().replace(/^RIN\s*/, '');
+            var q = $.trim($in.val()).toUpperCase().replace(/^(PARENT\s*)?RIN\s*/, '');
             if (q.length < 2) { $dd.hide(); return; }
             var digits = /^\d+$/.test(q);
+            var words = q.toLowerCase().replace(/['\u2019]/g, '').split(/\s+/).filter(Boolean);
             st.list = rinIndex.filter(function (e) {
-                return digits ? (e.rin && e.rin.indexOf(q) !== -1) || e.sku.toUpperCase().indexOf(q) !== -1
-                              : e.sku.toUpperCase().indexOf(q) !== -1;
-            }).sort(function (a, b) {   // exact matches first
-                var ea = a.rin === q || a.sku.toUpperCase() === q, eb = b.rin === q || b.sku.toUpperCase() === q;
-                return ea === eb ? 0 : ea ? -1 : 1;
-            }).slice(0, 12);
+                if (digits) return (e.rin && e.rin.indexOf(q) !== -1) || (e.parentRin && e.parentRin.indexOf(q) !== -1) ||
+                                   e.sku.toUpperCase().indexOf(q) !== -1;
+                if (e.sku.toUpperCase().indexOf(q) !== -1) return true;
+                // Name search: every word must match. Apparel shows once per print option, not per size.
+                var hay = e.text.replace(/['\u2019]/g, '');
+                return !(e.kind === 'grid' && !e.parent) && words.every(function (w) { return hay.indexOf(w) !== -1; });
+            }).sort(function (a, b) {   // exact matches first, then whole items before single sizes
+                var ea = a.rin === q || a.parentRin === q || a.sku.toUpperCase() === q, eb = b.rin === q || b.parentRin === q || b.sku.toUpperCase() === q;
+                if (ea !== eb) return ea ? -1 : 1;
+                return (b.parent ? 1 : 0) - (a.parent ? 1 : 0);
+            }).slice(0, 15);
             st.hl = st.list.length ? 0 : -1;
             show();
         });
@@ -744,13 +772,14 @@ function ensureRinFinder() {
 function goToRinEntry(e) {
     if (!e) return;
     $('#rinFindList').hide();
-    $('#rinFind').val((e.rin || e.sku) + ' — ' + e.label + (e.sizeLabel ? ', ' + e.sizeLabel : '')).blur();
+    $('#rinFind').val((e.rin ? (e.parent ? 'Parent RIN ' : '') + e.rin : e.sku) + ' — ' + e.label + (e.sizeLabel ? ', ' + e.sizeLabel : '')).blur();
     selectCategory(e.cat);
     var $card, $qty;
     if (e.kind === 'grid') {
         selectTier(e.garmentType, e.tierKey);
         $card = $('.sku-card[data-garment="' + e.garmentType + '"]');
-        $qty = $('#qty-' + e.garmentType + '-' + e.size);
+        var size = e.size || SIZE_ORDER.filter(function (sz) { return $('#qty-' + e.garmentType + '-' + sz).length; })[0];
+        $qty = $('#qty-' + e.garmentType + '-' + size);
     } else {
         $card = $('.sku-card[data-hg="' + e.key + '"]');
         $qty = $('#qty-' + e.key);

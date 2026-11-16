@@ -1626,8 +1626,8 @@ function searchItems(query) {
         });
     }
     return list.filter(function (it) {
-        var hay = (it.desc + ' ' + it.style).toLowerCase();
-        return tokens.every(function (t) { return hay.indexOf(t) !== -1; });
+        var hay = (it.desc + ' ' + it.style + ' ' + (it.words || '')).toLowerCase().replace(/['\u2019]/g, '');
+        return tokens.every(function (t) { return hay.indexOf(t.replace(/['\u2019]/g, '')) !== -1; });
     });
 }
 
@@ -1737,10 +1737,18 @@ function pickItem($row, item) {
 }
 
 // ── Catalog loading ──────────────────────────────────────────────────────────
+// NEXCOM's garment names (as on the MSA), matched by the style's garment code.
+var GARMENT_NAMES = { TEE: "Men's Tee (Core Cotton)", LS: "Men's Long Sleeve Tee", MW: "Men's Performance Tee (Moisture Wick)",
+                      FLC: "Men's Fleece Crew (Crewneck Sweatshirt)", HDY: "Men's Hoodie (Fleece Pullover)", MTNK: "Men's Tank", LTNK: "Ladies Tank" };
+var GARMENT_WORDS = { TEE: 'tee t-shirt shirt core cotton short sleeve', LS: 'long sleeve tee shirt core cotton', MW: 'performance moisture wick tee shirt dry',
+                      FLC: 'fleece crew crewneck sweatshirt sweater', HDY: 'hoodie hoody hooded sweatshirt fleece pullover',
+                      MTNK: 'tank top mens', LTNK: 'tank top womens women ladies' };
 function makeItem(style, desc, cat) {
     var m = /(\d+)\s*-\s*(\d+)\s*COLOR\s*(\d+)\s*LOC/i.exec(desc);
     var tier = m ? m[1] + '–' + m[2] + ' ink colors · ' + m[3] + ' location' + (m[3] === '1' ? '' : 's') : '';
-    return { style: style, desc: prettyDesc(desc), cat: cat, tier: tier,
+    var g = /^(?:SVN|LNP)([A-Z]+)\d-\d-\d$/i.exec(style), gk = g && GARMENT_NAMES[g[1].toUpperCase()] ? g[1].toUpperCase() : '';
+    var pretty = gk && m ? GARMENT_NAMES[gk] + ', ' + m[1] + '–' + m[2] + ' Color, ' + m[3] + ' Loc' : prettyDesc(desc);
+    return { style: style, desc: pretty, words: (gk ? GARMENT_WORDS[gk] + ' ' : '') + desc.toLowerCase(), cat: cat, tier: tier,
              minInks: m ? +m[1] : 0, maxInks: m ? +m[2] : 0, locs: m ? +m[3] : 0 };
 }
 
