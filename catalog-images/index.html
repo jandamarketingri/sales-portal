@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Catalog SKU Images</title>
+<style>
+  :root { --ink: #222; --muted: #666; --line: #e3e3e3; --accent: #764ba2; --bg: #f6f5f8; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: Arial, Helvetica, sans-serif; color: var(--ink); background: var(--bg); }
+  header { background: linear-gradient(135deg, #667eea, #764ba2); color: #fff; padding: 18px 16px; }
+  header h1 { margin: 0 0 4px; font-size: 22px; }
+  header p { margin: 0; font-size: 13px; opacity: .9; }
+  .bar { position: sticky; top: 0; z-index: 5; background: #fff; border-bottom: 1px solid var(--line); padding: 10px 16px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .bar input { flex: 1 1 240px; padding: 9px 12px; border: 2px solid #ddd; border-radius: 6px; font-size: 14px; }
+  .bar input:focus { outline: none; border-color: var(--accent); }
+  .seg button { border: 1px solid #ccc; background: #fff; padding: 8px 12px; font-size: 13px; cursor: pointer; }
+  .seg button:first-child { border-radius: 6px 0 0 6px; } .seg button:last-child { border-radius: 0 6px 6px 0; }
+  .seg button.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .count { font-size: 13px; color: var(--muted); }
+  main { padding: 16px; display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; }
+  .card { background: #fff; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; display: flex; flex-direction: column; }
+  .card a.pic { display: flex; align-items: center; justify-content: center; height: 180px; background: #fff; padding: 6px; }
+  .card img { max-width: 100%; max-height: 100%; object-fit: contain; }
+  .meta { padding: 8px 10px; border-top: 1px solid var(--line); font-size: 12px; }
+  .sku { font-family: Menlo, Consolas, monospace; font-weight: 700; font-size: 13px; color: var(--ink); word-break: break-all; }
+  .sub { color: var(--muted); margin-top: 2px; }
+  .more { display: flex; gap: 4px; margin-top: 6px; }
+  .more a { display: block; width: 36px; height: 36px; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
+  .more img { width: 100%; height: 100%; object-fit: cover; }
+  .empty { grid-column: 1 / -1; text-align: center; color: var(--muted); padding: 40px; }
+  @media (max-width: 480px) { main { grid-template-columns: repeat(2, 1fr); } .card a.pic { height: 140px; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Catalog SKU Images</h1>
+  <p>Every product photo from the NEXCOM DSD Souvenir and Local Navy Pride catalogs, named by the SKU printed under it. Click a picture for the full-size file.</p>
+</header>
+<div class="bar">
+  <input id="q" type="search" placeholder="Search a SKU or art #, e.g. 4743 or TC701" autocomplete="off">
+  <div class="seg" id="seg">
+    <button data-c="all" class="on">Both</button><button data-c="souvenir">Souvenir</button><button data-c="local-navy-pride">Local Navy Pride</button>
+  </div>
+  <span class="count" id="count"></span>
+</div>
+<main id="grid"><div class="empty">Loading…</div></main>
+<script>
+var data = null, cat = 'all';
+var NAMES = { 'souvenir': 'Souvenir', 'local-navy-pride': 'Local Navy Pride' };
+function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+function render() {
+  var q = document.getElementById('q').value.trim().toUpperCase(), html = '', n = 0;
+  Object.keys(data).forEach(function (c) {
+    if (cat !== 'all' && cat !== c) return;
+    data[c].images.forEach(function (im) {
+      if (q && im.sku.toUpperCase().indexOf(q) === -1) return;
+      n++;
+      var src = c + '/' + encodeURIComponent(im.file);
+      html += '<div class="card"><a class="pic" href="' + src + '" target="_blank" rel="noopener"><img loading="lazy" src="' + src + '" alt="' + esc(im.sku) + '"></a>' +
+        '<div class="meta"><div class="sku">' + esc(im.sku) + '</div><div class="sub">' + NAMES[c] + ' · catalog p. ' + im.page + '</div>' +
+        (im.more ? '<div class="more">' + im.more.map(function (m) { var s = c + '/' + encodeURIComponent(m.file);
+          return '<a href="' + s + '" target="_blank" rel="noopener" title="Also on p. ' + m.page + '"><img loading="lazy" src="' + s + '" alt=""></a>'; }).join('') + '</div>' : '') +
+        '</div></div>';
+    });
+  });
+  document.getElementById('grid').innerHTML = html || '<div class="empty">No SKU matches that.</div>';
+  document.getElementById('count').textContent = n + ' SKU' + (n === 1 ? '' : 's');
+}
+fetch('images.json').then(function (r) { return r.json(); }).then(function (d) { data = d; render(); })
+  .catch(function () { document.getElementById('grid').innerHTML = '<div class="empty">Couldn’t load the image list.</div>'; });
+document.getElementById('q').addEventListener('input', function () { if (data) render(); });
+document.getElementById('seg').addEventListener('click', function (e) {
+  var b = e.target.closest('button'); if (!b) return;
+  cat = b.getAttribute('data-c');
+  [].forEach.call(this.querySelectorAll('button'), function (x) { x.classList.toggle('on', x === b); });
+  if (data) render();
+});
+</script>
+</body>
+</html>
