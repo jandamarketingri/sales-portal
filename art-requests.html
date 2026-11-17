@@ -523,7 +523,7 @@ function sketchHtml(s, i) {
                              : '<span class="tag grey" title="Every sketch gets its own art # when the Art Admin assigns it">Art # pending</span>') +
         (s.artType === 'new' ? ' <span class="based-on">New design</span>' :
          s.artType === 'inks' ? ' <span class="variant-tag" title="The original inks are Variant 1">' + (s.variant ? 'Variant ' + s.variant : 'Variant # given when assigned') + '</span>' +
-            ' <span class="based-on">ink color change</span>' :
+            ' <span class="based-on">ink color change · no buyer approval needed</span>' :
          (s.referToArt ? ' <span class="based-on">based on <span class="req-id">' + esc(s.referToArt) + '</span></span>' : '')) + '</b>' +
         (s.priceTier ? '<span class="tag grey">' + esc(s.priceTier) + '</span>' : '') +
         (s.artType === 'inks' ? '<span class="tag grey">No licensing (inks only)</span>' :
