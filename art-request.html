@@ -358,8 +358,9 @@
         .ship-warn.bad { display: block; background: var(--warning-bg); color: var(--warning); border: 1px solid #f3dfa3; }
 
         /* ── Art type / print ── */
-        .art-type { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
-        @media (max-width: 600px) { .art-type { grid-template-columns: 1fr; } }
+        .art-type { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+        @media (max-width: 760px) { .art-type { grid-template-columns: 1fr; } }
+        .inks-note { display: none; background: #eef6ff; border: 1px solid #c9ddf5; border-radius: 8px; padding: 10px 14px; font-size: 13px; color: #1f3d63; margin: -6px 0 14px; line-height: 1.45; }
         .art-type-btn {
             text-align: left; padding: 11px 14px; border: 2px solid var(--border); border-radius: 8px; background: var(--surface);
             font-family: 'DM Sans', sans-serif; cursor: pointer; transition: all 0.15s;
@@ -1078,8 +1079,12 @@ function buildSketch(num) {
             '<div class="sub-label">Art</div>' +
             '<div class="art-type">' +
               '<button type="button" class="art-type-btn selected" data-type="existing"><b>Start from existing art</b><span>Use an art # and change names, logos, colors</span></button>' +
+              '<button type="button" class="art-type-btn" data-type="inks"><b>Ink color change only</b><span>Same art in different inks. Keeps the art #, gets a variant #</span></button>' +
               '<button type="button" class="art-type-btn" data-type="new"><b>New design</b><span>Something new. Goes to a designer for concept work</span></button>' +
             '</div>' +
+            '<div class="inks-note js-inks-note">The art stays exactly as it is: only the ink colors change. It keeps its art # and gets the next ' +
+              '<b>variant</b> (the original inks are Variant 1), so a buyer approval is still needed but licensing isn’t. ' +
+              'Need any other change, like a name or logo? Choose <b>Start from existing art</b> instead.</div>' +
             '<div class="form-row">' +
               '<div class="form-group js-refer-wrap">' +
                 '<label>Refer-to-Art # <span class="hint-inline">— or attach the art instead</span></label>' +
@@ -1119,7 +1124,7 @@ function buildSketch(num) {
             '<div class="swap-layout">' +
               '<div class="js-swaps"><div class="swap-table">' + swaps + '</div>' +
                 '<div class="field-hint" style="margin-top:8px;">Replace names, mascots or logos. Put "LOGO (UPLOADED)" in Add to use an attached file.</div></div>' +
-              '<div class="form-group desc-col"><label>Description <span class="required">*</span></label>' +
+              '<div class="form-group desc-col"><label>Description <span class="required js-desc-req">*</span></label>' +
                 '<textarea class="js-desc" placeholder="What should the artist do? Placement, size, anything else.&#10;&#10;e.g. See uploaded vector logo — convert it for this art."></textarea></div>' +
             '</div>' +
 
@@ -1180,14 +1185,22 @@ function buildSketch(num) {
 function artTypeOf($card) { return $card.find('.art-type-btn.selected').data('type') || 'existing'; }
 
 function applyArtType($card) {
-    var isNew = artTypeOf($card) === 'new';
+    var type = artTypeOf($card), isNew = type === 'new', inks = type === 'inks';
     $card.find('.js-refer-wrap').toggle(!isNew);
+    $card.find('.js-inks-note').toggle(inks);
+    $card.find('.js-refer-wrap label').html(inks ? 'Art # to change <span class="required">*</span> <span class="hint-inline">— a catalog design, library art or an approved request</span>'
+                                                 : 'Refer-to-Art # <span class="hint-inline">— or attach the art instead</span>');
+    // Ink changes: the inks are the whole request, so the artist can't choose them.
+    $card.find('.js-ink-mode button[data-mode="artist"]').toggle(!inks);
+    if (inks && inkModeOf($card) === 'artist') setInkMode($card, 'pick'); else renderPrint($card);
     applyArtSuffix($card);
-    $card.find('.js-swaps, .js-changes-label').toggle(!isNew);
-    $card.find('.js-changes-label').text(isNew ? '' : 'Changes');
-    $card.find('.js-attach-hint').text(isNew ? '— optional reference images, logos' : '— logos, the art you’re starting from');
+    $card.find('.js-swaps, .js-changes-label').toggle(!isNew && !inks);
+    $card.find('.js-changes-label').text(isNew || inks ? '' : 'Changes');
+    $card.find('.js-desc-req').toggle(!inks);
+    $card.find('.js-attach-hint').text(isNew ? '— optional reference images, logos' : inks ? '— optional' : '— logos, the art you’re starting from');
     $card.find('.js-desc').attr('placeholder', isNew
         ? 'Describe the design: theme, elements, text, style, placement.\n\nReference images are for inspiration only. We won’t copy another design.'
+        : inks ? 'Optional: anything the artist should know, e.g. match the Navy hoodie, or keep the gold outline.'
         : 'What should the artist do? Placement, size, anything else.\n\ne.g. See uploaded vector logo — convert it for this art.');
 }
 
@@ -1434,7 +1447,8 @@ function renderPrint($card) {
     } else if (tier) {
         $note.attr('class', 'print-note js-print-note').html('Print option: <b>' + esc(tier.label) + '</b>' + tierPickHtml(tierCodeOf(tier), 'Change for all items') + '. Pick ' +
             (tier.minInks === tier.maxInks ? tier.maxInks : tier.minInks + '–' + tier.maxInks) + ' ink colors and ' + tier.locs +
-            ' location' + (tier.locs > 1 ? 's' : '') + '. Pick each ink from the ink chart, or choose <b>Artist\u2019s choice</b> and the artist picks them.');
+            ' location' + (tier.locs > 1 ? 's' : '') + (artTypeOf($card) === 'inks' ? '. Pick each new ink from the ink chart.'
+            : '. Pick each ink from the ink chart, or choose <b>Artist\u2019s choice</b> and the artist picks them.'));
         $card.find('.js-ac-max').text(' (up to ' + tier.maxInks + ' for this price point)');
     } else {
         $note.attr('class', 'print-note js-print-note').html('Pick an apparel item to see how many ink colors and locations its price point includes. For other items, inks are optional.');
@@ -1906,11 +1920,30 @@ function parseCSVRow(row) {
 var ART_SUFFIX_RE = /_([A-Z]{2})$/i;
 function artSuffixOf(v) { var m = ART_SUFFIX_RE.exec(String(v || '').trim()); return m ? m[1].toUpperCase() : ''; }
 
+// Catalog designs have no suffix (BAT-4450): an ink change adds the account's, like the order pages do.
+var ACCOUNT_ART_SUFFIX = { 'Souvenir': 'XX', 'Local Navy Pride': 'NY' };
+function inksArtNumber(v) {
+    v = String(v || '').trim().toUpperCase();
+    if (v && !artSuffixOf(v) && ACCOUNT_ART_SUFFIX[state.account]) v += '_' + ACCOUNT_ART_SUFFIX[state.account];
+    return v;
+}
+
 function applyArtSuffix($card) {
     var $lic = $card.find('.js-lic');
+    var $hint = $card.find('.js-refer-hint');
+    if (artTypeOf($card) === 'inks') {
+        // Only the inks change, so no licensing: the box is hidden and off.
+        $lic.hide().removeClass('on');
+        var r = $card.find('.js-refer').val().trim();
+        $hint.text(r && !artSuffixOf(r)
+            ? (ACCOUNT_ART_SUFFIX[state.account] ? 'Catalog design: ordered as ' + inksArtNumber(r) + '.' : 'Pick the account first, so we know the suffix.')
+            : 'The art # stays the same. A variant # is added when the art team takes it.').css('color', '');
+        updateSummary();
+        return;
+    }
+    $lic.show();
     var ref = artTypeOf($card) === 'existing' ? $card.find('.js-refer').val().trim() : '';
     var suf = artSuffixOf(ref);
-    var $hint = $card.find('.js-refer-hint');
     if (ACCOUNTS_ALWAYS_LICENSED.indexOf(state.account) !== -1) {
         $lic.data('locked', 'account').addClass('on').find('.auto').text('always for ' + state.account).show();
         $hint.text(suf ? (suf === 'XX' ? '_XX art: ' : '_' + suf + ' art: ') + state.account + ' always goes to licensing.'
@@ -2217,8 +2250,22 @@ function validate() {
             errors.push('Sketch ' + n + ': choose ' + (tier.minInks === tier.maxInks ? tier.maxInks : 'at least ' + tier.minInks) +
                 ' ink color' + (tier.minInks > 1 ? 's' : '') + ' for this price point, or choose Artist\u2019s choice');
         }
-        need($c.find('.js-desc'), 'Sketch ' + n + ': description');
+        if (artTypeOf($c) !== 'inks') need($c.find('.js-desc'), 'Sketch ' + n + ': description');
 
+        if (artTypeOf($c) === 'inks') {
+            var inkRef = $c.find('.js-refer').val().trim();
+            if (!inkRef) {
+                $c.find('.js-refer').addClass('field-error');
+                errors.push('Sketch ' + n + ': the art # whose ink colors are changing');
+            } else if (!artSuffixOf(inksArtNumber(inkRef))) {
+                $c.find('.js-refer').addClass('field-error');
+                errors.push('Sketch ' + n + ': pick the account first, so the art # gets its suffix');
+            }
+            if (!picked.length) {
+                $c.find('.js-ink').first().addClass('field-error');
+                errors.push('Sketch ' + n + ': choose the new ink colors');
+            }
+        }
         if (artTypeOf($c) === 'existing') {
             var refVal = $c.find('.js-refer').val().trim();
             var hasArt = refVal || $c.data('files');
@@ -2316,8 +2363,8 @@ function buildPayload() {
                             color: rowColorValue($(this)),
                             parentRin: rd ? rd.p : '', rins: rd ? rd.r : [] });
         });
-        var isNew = artTypeOf($c) === 'new';
-        if (!isNew) {
+        var aType = artTypeOf($c), isNew = aType === 'new', isInks = aType === 'inks';
+        if (!isNew && !isInks) {
             $c.find('.swap-table input.omit').each(function () {
                 var row = $(this).data('row');
                 var o = $(this).val().trim(), a = $c.find('input.add[data-row="' + row + '"]').val().trim();
@@ -2327,8 +2374,8 @@ function buildPayload() {
         var tier = sketchTier($c);
         sketches.push({
             number: $c.data('num'),
-            artType: isNew ? 'new' : 'existing',
-            referToArt: isNew ? '' : $c.find('.js-refer').val().trim().toUpperCase(),
+            artType: aType,
+            referToArt: isNew ? '' : isInks ? inksArtNumber($c.find('.js-refer').val()) : $c.find('.js-refer').val().trim().toUpperCase(),
             locations: $c.find('.js-loc').map(function () { return $(this).val(); }).get().filter(Boolean).map(locLabel),
             inkMode: inkModeOf($c),
             inkColors: inkModeOf($c) === 'artist'
@@ -2338,7 +2385,7 @@ function buildPayload() {
             items: garments,
             changes: changes,
             description: $c.find('.js-desc').val().trim(),
-            needsLicensing: $c.find('.js-lic').hasClass('on'),
+            needsLicensing: !isInks && $c.find('.js-lic').hasClass('on'),
             libraryFile: (!isNew && $c.data('libraryFile')) ? { id: $c.data('libraryFile').id, name: $c.data('libraryFile').name } : null,
             fileObjs: $c.data('files') || []
         });
@@ -2589,7 +2636,9 @@ function openReview() {
     p.sketches.forEach(function (s) {
         var g = s.items.map(function (x) { return x.description + (x.color ? ' — ' + x.color : '') + (x.parentRin ? ' (Parent RIN ' + x.parentRin + ')' : ''); }).join(', ');
         var ch = s.changes.map(function (c) { return esc(c.omit || '—') + ' → ' + esc(c.add || '—'); }).join(' · ');
-        html += '<div class="rv-sketch"><b>Sketch ' + s.number + '</b> · ' + (s.artType === 'new' ? 'New design' : 'Existing art' + (s.referToArt ? ' ' + esc(s.referToArt) : '') +
+        html += '<div class="rv-sketch"><b>Sketch ' + s.number + '</b> · ' + (s.artType === 'new' ? 'New design' :
+                s.artType === 'inks' ? 'Ink color change of ' + esc(s.referToArt) + ' <span style="color:var(--text-muted);">(same art #, new variant)</span>' :
+                'Existing art' + (s.referToArt ? ' ' + esc(s.referToArt) : '') +
                 (s.libraryFile ? ' <span style="color:var(--text-muted);">(picture from the Art Library)</span>' : '')) +
             (s.needsLicensing ? '<span class="tag-lic">Licensing</span>' : '') +
             '<div>' + esc(g) + '</div>' +

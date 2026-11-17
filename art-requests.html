@@ -89,6 +89,8 @@
         .action-block .num-row input.js-lic-other { grid-column: 2; width: 70px; padding: 6px; font-family: 'DM Mono', monospace; font-size: 13px; text-transform: uppercase; margin: 0; text-align: center; }
         .num-row .hint.lic-why { grid-column: 1 / -1; width: auto; margin: 0; font-size: 12px; }
         .num-row .hint { width: 100%; }
+        .variant-tag { display: inline-block; font-size: 12px; font-weight: 700; color: #1f3d63; background: #e6f0fb; border: 1px solid #c9ddf5; border-radius: 10px; padding: 1px 8px; white-space: nowrap; }
+        .num-box .num-row > .variant-tag { grid-column: 1 / -1; justify-self: end; }
         .on-pair { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; margin-right: 6px; }
         .req-title { font-size: 15.5px; font-weight: 600; }
         .req-meta { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12.5px; color: var(--text-muted); margin-top: 4px; }
@@ -517,11 +519,15 @@ function sketchHtml(s, i) {
             (it.parentRin ? ' <span class="item-rin" title="' + esc((it.rins || []).map(function (x) { return (x[0] ? x[0] + ' ' : 'RIN ') + x[1]; }).join(' · ')) + '">Parent RIN ' + esc(it.parentRin) + '</span>' : '');
     }).join('<br>');
     return '<div class="sketch"><div class="hd"><span class="num">' + (i + 1) + '</span>' +
-        '<b>' + (s.artNumber ? '<span class="art-num" title="Art #">' + esc(s.artNumber) + '</span>'
+        '<b>' + ((s.artNumber || s.artType === 'inks') ? '<span class="art-num" title="Art #">' + esc(s.artNumber || s.referToArt) + '</span>'
                              : '<span class="tag grey" title="Every sketch gets its own art # when the Art Admin assigns it">Art # pending</span>') +
-        (s.artType === 'new' ? ' <span class="based-on">New design</span>' : (s.referToArt ? ' <span class="based-on">based on <span class="req-id">' + esc(s.referToArt) + '</span></span>' : '')) + '</b>' +
+        (s.artType === 'new' ? ' <span class="based-on">New design</span>' :
+         s.artType === 'inks' ? ' <span class="variant-tag" title="The original inks are Variant 1">' + (s.variant ? 'Variant ' + s.variant : 'Variant # given when assigned') + '</span>' +
+            ' <span class="based-on">ink color change</span>' :
+         (s.referToArt ? ' <span class="based-on">based on <span class="req-id">' + esc(s.referToArt) + '</span></span>' : '')) + '</b>' +
         (s.priceTier ? '<span class="tag grey">' + esc(s.priceTier) + '</span>' : '') +
-        (s.licenseSuffix ? (s.licenseSuffix === 'XX' ? '<span class="tag grey">Not licensed</span>' : '<span class="tag">Licensing: ' + esc(licenseLabel(s.licenseSuffix)) + '</span>')
+        (s.artType === 'inks' ? '<span class="tag grey">No licensing (inks only)</span>' :
+         s.licenseSuffix ? (s.licenseSuffix === 'XX' ? '<span class="tag grey">Not licensed</span>' : '<span class="tag">Licensing: ' + esc(licenseLabel(s.licenseSuffix)) + '</span>')
                          : (s.needsLicensing ? '<span class="tag">Licensing</span>' : '')) + '</div>' +
         '<div class="row"><b>Items</b><br>' + items + '</div>' +
         '<div class="row"><b>Locations</b>' + esc((s.locations || []).map(locText).join(' + ')) + '</div>' +
@@ -858,11 +864,12 @@ function filesLine(label, files) {
 function sketchNumber(s) { return s.artNumber || (s.artType === 'new' ? '' : (s.referToArt || '')); }
 function orderNumbersHtml(d, label) {
     var list = (d.sketches || []).map(function (s, i) {
-        return { n: i + 1, num: sketchNumber(s) };
+        return { n: i + 1, num: sketchNumber(s), variant: s.variant || 0 };
     }).filter(function (x) { return x.num; });
     if (!list.length) return '';
     return '<div class="lbl" style="margin:8px 0 4px;">' + (label || 'Art # to order with') + '</div><div class="order-nums">' + list.map(function (x) {
-        return '<span class="on-pair">' + (list.length > 1 ? '<span class="on-sk">Sketch ' + x.n + '</span>' : '') + '<span class="art-num">' + esc(x.num) + '</span></span>';
+        return '<span class="on-pair">' + (list.length > 1 ? '<span class="on-sk">Sketch ' + x.n + '</span>' : '') + '<span class="art-num">' + esc(x.num) + '</span>' +
+            (x.variant ? '<span class="variant-tag">Variant ' + x.variant + '</span>' : '') + '</span>';
     }).join('') + '</div>' +
     (label ? '' : '<div class="hint" style="margin-top:4px;">Use this art # on the order page, not the request number (AR-…).</div>');
 }
@@ -889,6 +896,13 @@ function suggestedSuffix(s) {
 function assignNumbersHtml(q) {
     var d = q.data || {}, rows = [], anyNew = true;
     (d.sketches || []).forEach(function (s, i) {
+        if (s.artType === 'inks') {   // keeps its art #, gets a variant, no licensing: nothing to choose
+            rows.push('<div class="num-row"><span class="on-sk">Sketch ' + (i + 1) + '</span>' +
+                '<span class="art-num">' + esc(s.artNumber || s.referToArt || '') + '</span>' +
+                '<span class="variant-tag">' + (s.variant ? 'Variant ' + s.variant : 'next variant # on assign') + '</span>' +
+                '<span class="hint lic-why">ink color change: same art #, no licensing</span></div>');
+            return;
+        }
         var isNew = s.artType === 'new';
         var m = /^([A-Z]{2}\d+)_([A-Z]{2})$/.exec(s.artNumber || '');
         var suf = suggestedSuffix(s), known = !!licenseName(suf);
