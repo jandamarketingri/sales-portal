@@ -1011,11 +1011,28 @@ function addGridToCart(garmentType) {
 
 // ---- Hardgood card ----
 var hardgoodState = {};
+// Sitting bears come in several bear colors AND wear a hoodie or jersey in another color.
+var SECOND_COLOR = [
+    [/^BEAR(6|10HD|12HD)$/, 'PLUSH_BEANBUDDY', 'Hoodie Color', 'hoodie'],
+    [/^BEAR(10|12)$/, 'PLUSH_BEANBUDDY', 'Jersey Color', 'jersey']
+];
+function secondColorFor(rec) {
+    var core = styleCore(rec.baseSKU), x = SECOND_COLOR.filter(function (r) { return r[0].test(core); })[0];
+    return x && colorData[x[1]] ? { key: x[1], label: x[2], word: x[3] } : null;
+}
+function swatchesHtml(key, list, fn) {
+    return list.map(function (c) {
+        return '<div class="swatch" data-name="' + c.name + '" onclick="' + fn + '(\'' + key + '\',\'' + c.name.replace(/'/g, "\\'") + '\')">' +
+            '<div class="swatch-chip" style="background:' + c.hex + '"></div><div class="swatch-name">' + c.name + '</div></div>';
+    }).join('');
+}
 function renderHardgoodCard(rec, key) {
     var hasColor = !!rec.colorAttribute;
     var colorBlock = hasColor
         ? '<div class="section-label">' + (colorData[rec.colorAttribute] ? colorData[rec.colorAttribute].attribute : 'Color') + '<span class="selected-value" id="colorLabel-' + key + '">Select a color</span></div><div class="swatch-grid" id="swatchGrid-' + key + '"></div>'
         : '';
+    var second = secondColorFor(rec);
+    if (second) colorBlock += '<div class="section-label">' + second.label + '<span class="selected-value" id="colorLabel2-' + key + '">Select a color</span></div><div class="swatch-grid" id="swatchGrid2-' + key + '"></div>';
     var artBlock = rec.requiresArt
         ? '<div class="section-label">Artwork<span class="selected-value" id="artLabel-' + key + '">Select a design</span></div>' +
           '<div class="art-picker-layout">' +
@@ -1036,15 +1053,13 @@ function renderHardgoodCard(rec, key) {
         '</div>';
 }
 function initHardgoodCard(rec, key) {
-    hardgoodState[key] = { color: null, art: null, rec: rec };
+    hardgoodState[key] = { color: null, color2: null, second: secondColorFor(rec), art: null, rec: rec };
     if (rec.colorAttribute) {
         var list = (colorData[rec.colorAttribute] && colorData[rec.colorAttribute].colors) || [];
-        var html = list.map(function (c) {
-            return '<div class="swatch" data-name="' + c.name + '" onclick="selectHardgoodColor(\'' + key + '\',\'' + c.name.replace(/'/g, "\\'") + '\')">' +
-                '<div class="swatch-chip" style="background:' + c.hex + '"></div><div class="swatch-name">' + c.name + '</div></div>';
-        }).join('');
-        $('#swatchGrid-' + key).html(html);
+        $('#swatchGrid-' + key).html(swatchesHtml(key, list, 'selectHardgoodColor'));
     }
+    var second = hardgoodState[key].second;
+    if (second) $('#swatchGrid2-' + key).html(swatchesHtml(key, colorData[second.key].colors || [], 'selectHardgoodColor2'));
     if (rec.requiresArt) initArtComboFor(key);
 }
 function selectHardgoodColor(key, name) {
@@ -1053,10 +1068,22 @@ function selectHardgoodColor(key, name) {
     $('#swatchGrid-' + key + ' .swatch[data-name="' + name + '"]').addClass('selected');
     $('#colorLabel-' + key).text(name);
 }
+function selectHardgoodColor2(key, name) {
+    hardgoodState[key].color2 = name;
+    $('#swatchGrid2-' + key + ' .swatch').removeClass('selected');
+    $('#swatchGrid2-' + key + ' .swatch[data-name="' + name + '"]').addClass('selected');
+    $('#colorLabel2-' + key).text(name);
+}
+/** The color on the order line: one color, or "Pink bear · Navy hoodie" for a bear. */
+function hardgoodColorValue(st) {
+    if (!st.second) return st.color || '';
+    return [st.color ? st.color + ' bear' : '', st.color2 ? st.color2 + ' ' + st.second.word : ''].filter(Boolean).join(' · ');
+}
 function addHardgoodToCart(key) {
     var st = hardgoodState[key];
     var rec = st.rec;
-    if (rec.colorAttribute && !st.color) { alert('Please select a color.'); return; }
+    if (rec.colorAttribute && !st.color) { alert(st.second ? 'Please select a bear color.' : 'Please select a color.'); return; }
+    if (st.second && !st.color2) { alert('Please select a ' + st.second.word + ' color.'); return; }
     if (rec.requiresArt && !st.art) { alert('Please select artwork.'); return; }
     var qty = parseInt($('#qty-' + key).val()) || 0;
     if (qty === 0) { alert('Please enter a quantity.'); return; }
@@ -1064,7 +1091,7 @@ function addHardgoodToCart(key) {
         productName: rec.baseSKU, sku: rec.skus.OS || rec.baseSKU, rin: rinFor(rec.baseSKU, 'OS', rec.skus.OS || rec.baseSKU), size: 'OS', quantity: qty,
         category: rec.category, isCustom: rec.requiresArt,
         style: rec.baseSKU, styleDesc: rec.description,
-        color: st.color || '', artId: st.art ? (st.art.erpId || st.art.id) : '', artLabel: st.art ? (st.art.source === 'catalog' ? 'Catalog design: ' : '') + st.art.label : '',
+        color: hardgoodColorValue(st), artId: st.art ? (st.art.erpId || st.art.id) : '', artLabel: st.art ? (st.art.source === 'catalog' ? 'Catalog design: ' : '') + st.art.label : '',
         artRequestId: st.art && st.art.requestId ? st.art.requestId : '',
         cost: costFor(rec.baseSKU, 'OS', rec.skus.OS || rec.baseSKU, rec.prices.OS || rec.prices.S)
     });

@@ -691,22 +691,27 @@
     "attribute": "Bear Color",
     "colors": [
       {
+        "name": "Chocolate",
+        "hex": "#5C3A21"
+      },
+      {
         "name": "Beige",
         "hex": "#D9B99B"
       },
       {
-        "name": "Pink",
-        "hex": "#F1B8C8"
+        "name": "Cream",
+        "hex": "#E9E2D0"
       },
       {
         "name": "Blue",
         "hex": "#7EC4E8"
       },
       {
-        "name": "Cream",
-        "hex": "#E9E2D0"
+        "name": "Pink",
+        "hex": "#F1B8C8"
       }
-    ]
+    ],
+    "source": "Bear colors from William Morgan, Nov 17 2026 (all sizes)."
   },
   "PLUSH_BANDANA": {
     "label": "Character Plush (Border Collie, Tabby Kitty, Corgi, Siamese Kitty)",
@@ -739,7 +744,7 @@
     ]
   },
   "PLUSH_BEANBUDDY": {
-    "label": "Bean Buddies with Tee (Frog, Beaver, Eagle)",
+    "label": "Plush tee / hoodie / jersey (Bean Buddies, Sitting Bears)",
     "attribute": "Tee Color",
     "colors": [
       {
@@ -803,7 +808,7 @@
         "hex": "#D2B48C"
       },
       {
-        "name": "Kelly",
+        "name": "Kelly Green",
         "hex": "#4CBB17"
       },
       {
@@ -811,10 +816,15 @@
         "hex": "#018E82"
       },
       {
-        "name": "Heather",
+        "name": "Heather Grey",
         "hex": "#A9AAB0"
+      },
+      {
+        "name": "Tie-Dye",
+        "hex": "linear-gradient(135deg,#e53935,#fdd835,#43a047,#1e88e5,#8e24aa)"
       }
-    ]
+    ],
+    "source": "Tee/hoodie colors from William Morgan, Nov 17 2026."
   },
   "PATCH_CAP": {
     "label": "Patch Cap — leather patch color",
