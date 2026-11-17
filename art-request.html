@@ -382,8 +382,9 @@
         .color-combo { position: relative; }
         .color-combo .ink-sw { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; border-radius: 4px; border: 1px solid rgba(0,0,0,0.18); background: repeating-linear-gradient(45deg,#eee 0 3px,#fff 3px 6px); pointer-events: none; display: none; }
         .color-combo.has-list .ink-sw { display: block; }
-        .color-combo.has-list input { padding-left: 34px; }
-        .color-combo.picked input { border-color: #a5d6a7; background: #f5fbf5; font-weight: 600; }
+        .color-combo.has-list input { padding-left: 34px; padding-right: 30px; cursor: pointer; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23666' stroke-width='1.6' fill='none'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 11px center; }
+        .color-combo.has-list input[readonly] { background-color: var(--surface); color: var(--text); }
+        .color-combo.picked input, .color-combo.picked input[readonly] { border-color: #a5d6a7; background-color: #f5fbf5; font-weight: 600; }
         .color-combo .ink-dd { min-width: 220px; }
         .garment-row .match-note { grid-column: 2 / -1; font-size: 12px; color: var(--accent2); background: #f7f1fc; border: 1px solid #e3d9ee; border-radius: 6px; padding: 5px 9px; }
         .tier-pick { display: inline-flex; align-items: center; gap: 6px; margin-left: 6px; }
@@ -1245,6 +1246,11 @@ function setSketchTier($card, code) {
 // ── Garment colors (garment-colors.json, same list as the order pages) ──────
 var GARMENT_COLORS = {};
 var COLOR_KEY_ALIASES = { PTCHCAP: 'PATCH_CAP' };
+// Items whose color list isn't named after the style: plush, bears and drinkware.
+var COLOR_KEY_BY_STYLE = [
+    [/^(J35-|J34-)/, 'PLUSH_BANDANA'], [/^(J32-|J60-|J31-|J59-)/, 'PLUSH_BEANBUDDY'], [/^BEAR/, 'PLUSH_BEAR'],
+    [/^PC(06|09|10|11|13)$/, 'POLAR_CAMEL'], [/^TC701$/, 'NALGENE_32'], [/^TC704$/, 'NALGENE_16']
+];
 function loadGarmentColors() {
     return fetch('garment-colors.json').then(function (r) { return r.json(); })
         .then(function (j) { GARMENT_COLORS = j || {}; $('#sketches .garment-row').each(function () { var it = catalogByStyle[$(this).data('style')]; if (it) refreshRowColors($(this), it); }); })
@@ -1253,14 +1259,20 @@ function loadGarmentColors() {
 function colorListFor(style) {
     var m = /^(SVN|LNP)(.*?)(\d+-\d+-\d+)?$/.exec(String(style || ''));
     if (!m) return null;
-    var key = COLOR_KEY_ALIASES[m[2]] || m[2], g = GARMENT_COLORS[key];
+    var core = String(style).replace(/^(SVN|LNP)/i, '').toUpperCase();
+    var byStyle = COLOR_KEY_BY_STYLE.filter(function (x) { return x[0].test(core); })[0];
+    var key = byStyle ? byStyle[1] : (COLOR_KEY_ALIASES[m[2]] || m[2]), g = GARMENT_COLORS[key];
     return g && g.colors && g.colors.length ? g.colors : null;
 }
 function refreshRowColors($row, item) {
     var list = colorListFor(item.style), apparel = item.cat === 'Apparel';
     $row.data('colors', list).find('.color-combo').toggleClass('has-list', !!list);
-    $row.find('.js-color').attr('placeholder', list ? (apparel ? 'Pick a garment color' : 'Pick a color') : apparel ? 'Garment color' : 'Color / finish (optional)');
+    $row.find('.js-color').attr('placeholder', colorPlaceholder(list, apparel)).prop('readOnly', !!list);
+    if (list && $row.find('.js-color').val() && !matchColor(list, $row.find('.js-color').val())) $row.find('.js-color').val('');
     paintColor($row);
+}
+function colorPlaceholder(list, apparel) {
+    return list ? (apparel ? 'Click to pick a garment color' : 'Click to pick a color') : apparel ? 'Garment color' : 'Color / finish (optional)';
 }
 function matchColor(list, v) {
     v = String(v || '').trim().toLowerCase();
@@ -1273,15 +1285,14 @@ function paintColor($row) {
 function renderColorDropdown($row) {
     var list = $row.data('colors'), $dd = $row.find('.color-dd');
     if (!list) { $dd.removeClass('open'); return; }
-    var q = $row.find('.js-color').val().trim().toLowerCase();
-    if (matchColor(list, q)) q = '';
+    var q = $row.data('colorTyped') || '';
     var rank = function (c) { var n = c.name.toLowerCase(); return n === q ? 0 : n.indexOf(q) === 0 ? 1 : 2; };
     var hits = list.filter(function (c) { return !q || c.name.toLowerCase().indexOf(q) !== -1; });
     if (q) hits.sort(function (a, b) { return rank(a) - rank(b); });   // "navy" → Navy before Heather Navy
     $row.data('colorHits', hits).data('colorHl', 0);
     $dd.html(hits.length ? hits.map(function (c, i) {
         return '<div class="ink-opt js-color-opt' + (i === 0 ? ' hl' : '') + '" data-i="' + i + '"><span class="ink-sw" style="background:' + esc(c.hex) + '"></span><span class="nm">' + esc(c.name) + '</span></div>';
-    }).join('') : '<div class="item-empty">No color matches “' + esc(q) + '”. This garment comes in the colors on the list.</div>').addClass('open');
+    }).join('') : '<div class="item-empty">No color matches “' + esc(q) + '”. Press Backspace to see them all.</div>').addClass('open');
 }
 function pickColor($row, c) {
     if (!c) return;
@@ -1290,11 +1301,17 @@ function pickColor($row, c) {
     paintColor($row); updateSummary();
 }
 function bindColorPicker() {
-    $(document).on('focus', '.color-combo .js-color', function () { var $r = $(this).closest('.garment-row'); if ($r.data('colors')) { this.select(); renderColorDropdown($r); } });
+    $(document).on('focus click', '.color-combo .js-color', function () { var $r = $(this).closest('.garment-row'); if ($r.data('colors') && !$r.find('.color-dd').hasClass('open')) { $r.data('colorTyped', ''); renderColorDropdown($r); } });
     $(document).on('input', '.color-combo .js-color', function () { var $r = $(this).closest('.garment-row'); paintColor($r); renderColorDropdown($r); });
     $(document).on('keydown', '.color-combo .js-color', function (e) {
         var $r = $(this).closest('.garment-row'), $dd = $r.find('.color-dd');
-        if (!$dd.hasClass('open')) return;
+        if (!$r.data('colors')) return;
+        // The box can't be typed in; typing letters narrows the list instead.
+        if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+            e.preventDefault(); $r.data('colorTyped', ($r.data('colorTyped') || '') + e.key.toLowerCase()); renderColorDropdown($r); return;
+        }
+        if (e.key === 'Backspace') { e.preventDefault(); $r.data('colorTyped', ($r.data('colorTyped') || '').slice(0, -1)); renderColorDropdown($r); return; }
+        if (!$dd.hasClass('open')) { if (e.key === 'ArrowDown' || e.key === 'Enter') { e.preventDefault(); $r.data('colorTyped', ''); renderColorDropdown($r); } return; }
         var hits = $r.data('colorHits') || [], hl = $r.data('colorHl') || 0;
         if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
             e.preventDefault();
@@ -1309,6 +1326,7 @@ function bindColorPicker() {
         var $r = $(this).closest('.garment-row'), el = this;
         setTimeout(function () {
             $r.find('.color-dd').removeClass('open');
+            $r.data('colorTyped', '');
             var list = $r.data('colors'), v = $(el).val().trim();
             if (!list || !v) return;
             var hit = matchColor(list, v) || (function () { var h = list.filter(function (c) { return c.name.toLowerCase().indexOf(v.toLowerCase()) !== -1; }); return h.length === 1 ? h[0] : null; })();
@@ -1567,7 +1585,7 @@ function setRowItem($row, item) {
     }
     var apparel = item && item.cat === 'Apparel';
     var list = item ? colorListFor(item.style) : null;
-    $color.attr('placeholder', list ? (apparel ? 'Pick a garment color' : 'Pick a color') : apparel ? 'Garment color' : 'Color / finish (optional)');
+    $color.attr('placeholder', colorPlaceholder(list, apparel)).prop('readOnly', !!list);
     $row.data('needsColor', !!apparel).data('colors', list);
     $row.find('.color-combo').toggleClass('has-list', !!list);
     if (list && $color.val() && !matchColor(list, $color.val())) $color.val('');
