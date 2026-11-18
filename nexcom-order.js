@@ -1346,8 +1346,10 @@ $(document).ready(function () {
     renderTopBar(auth);
     $('#repName').val(auth.name);
     $('#repEmail').val(auth.email);
-    $('#pageTitle').text(CFG.customerLabel);
-    document.title = CFG.customerLabel + ' - NEXCOM Ordering';
+    // Nov 18 2026 meeting: these pages are where reps order existing art, so the title says "(Reorders)".
+    var pageLabel = CFG.pageLabel || (CFG.customerLabel + ' (Reorders)');
+    $('#pageTitle').text(pageLabel);
+    document.title = pageLabel + ' - NEXCOM Ordering';
     if (CFG.logo) $('#programLogo').attr('src', CFG.logo);
     loadEverything();
     restoreCartLocal();
