@@ -32,6 +32,7 @@ var MOQ_DATA = {
     // Decals and magnets
     'VD3.5': { q: 24 }, 'VD6': { q: 24 }, 'VD6X2': { q: 24 }, 'VD10': { q: 24 },
     'VD12X6': { q: 24 }, 'VD12X12': { q: 24 }, 'VD20T': { q: 24 },
+    'VD3SM': { q: 24 }, 'VD6SM': { q: 24 },   // not in the catalogs: from the NEX DSD Item Details sheet
     'MAG-SM': { q: 24 }, 'MAG': { q: 24 }, 'MAG6': { q: 24 }, 'MAG8': { q: 24 }, 'MAGEURO': { q: 24 }, 'MAG10T': { q: 24 }, 'MAG12': { q: 24 },
     // Textured stickers (the 5" x 5" is 20, confirmed Nov 18 2026; the catalog's "520" was a typo)
     'TS2': { q: 50 }, 'TS3': { q: 35 }, 'TS5': { q: 20 },
@@ -42,7 +43,7 @@ var MOQ_DATA = {
     // Key chains
     '300JD': { q: 72 }, '301JD': { q: 72 }, '301LG': { q: 72 }, 'BOK01': { q: 48 }, 'KCSTRP-100': { q: 24 },
     // Playing cards and puzzle cubes
-    'PCC': { q: 50 }, 'JCUBE': { q: 24 }, 'CUBE-KC': { q: 24 },
+    'PCC': { q: 50 }, 'PCSS': { q: 50 },   /* PCSS: from the NEX DSD Item Details sheet */ 'JCUBE': { q: 24 }, 'CUBE-KC': { q: 24 },
     // Ornaments
     '1081100': { q: 12 }, '1081101': { q: 12 }, '1081102': { q: 12 },
     '1081103': { q: 12 }, '1081104': { q: 12 }, '1081105': { q: 12 },
