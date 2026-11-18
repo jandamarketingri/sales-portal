@@ -33,8 +33,8 @@ var MOQ_DATA = {
     'VD3.5': { q: 24 }, 'VD6': { q: 24 }, 'VD6X2': { q: 24 }, 'VD10': { q: 24 },
     'VD12X6': { q: 24 }, 'VD12X12': { q: 24 }, 'VD20T': { q: 24 },
     'MAG-SM': { q: 24 }, 'MAG': { q: 24 }, 'MAG6': { q: 24 }, 'MAG8': { q: 24 }, 'MAGEURO': { q: 24 }, 'MAG10T': { q: 24 }, 'MAG12': { q: 24 },
-    // Textured stickers (the catalog says 520 for the 5" x 5"; left out until that's confirmed)
-    'TS2': { q: 50 }, 'TS3': { q: 35 },
+    // Textured stickers (the 5" x 5" is 20, confirmed Nov 18 2026; the catalog's "520" was a typo)
+    'TS2': { q: 50 }, 'TS3': { q: 35 }, 'TS5': { q: 20 },
     // Window clings and sticker sheets
     'CL3': { q: 50 }, 'CL5': { q: 40 }, 'CL6X2': { q: 40 }, 'CL16': { q: 20 }, 'SS1': { q: 24 },
     // Bags
