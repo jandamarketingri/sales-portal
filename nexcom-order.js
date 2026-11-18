@@ -1162,6 +1162,12 @@ function ensureMoqStyles() {
         '.moq-line:empty { display: none; } .moq-line .moq-line { margin: 0; }' +
         '.moq-badge { display: inline-block; background: #f1eaf7; color: #4a2e6b; border: 1px solid #d9c8ea; border-radius: 12px; padding: 3px 10px; font-size: 13px; font-weight: 700; }' +
         '.moq-note { font-size: 12px; color: #666; }' +
+        '#cartOverlay { z-index: 1050 !important; } #cartDrawer { z-index: 1100 !important; }' +   /* above the top bar, so the drawer's title and \u2715 show */
+        '.cart-qty { display: inline-flex; align-items: center; border: 1px solid #cfc3de; border-radius: 8px; overflow: hidden; background: #fff; }' +
+        '.cq-btn { width: 30px; height: 30px; border: none; background: #f1eaf7; color: #4a2e6b; font-size: 18px; font-weight: 700; cursor: pointer; line-height: 1; padding: 0; }' +
+        '.cq-btn:hover:not(:disabled) { background: #e2d3f0; } .cq-btn:disabled { color: #bbb; cursor: default; }' +
+        '.cart-qty-input { width: 54px; height: 30px; border: none; border-left: 1px solid #cfc3de; border-right: 1px solid #cfc3de; text-align: center; font-size: 14px; font-weight: 700; -moz-appearance: textfield; }' +
+        '.cart-qty-input::-webkit-outer-spin-button, .cart-qty-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }' +
         '.lead-badge { display: inline-block; background: #e8f3ec; color: #1e5b34; border: 1px solid #bfdcc9; border-radius: 12px; padding: 3px 10px; font-size: 13px; font-weight: 700; }' +
         '.price-line { font-size: 13px; color: #444; margin: 4px 0 2px; } .price-line b { color: #222; }' +
         '.moq-warn { background: #fdecea; border: 1px solid #e57373; color: #b71c1c; border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; font-size: 13px; }' +
@@ -1243,6 +1249,20 @@ $(document).on('change', '#beginShipDate, #shipByDate', function () { saveCartLo
 function openCart() { renderCartDrawer(); $('#cartDrawer').addClass('open'); $('#cartOverlay').addClass('open'); }
 function closeCart() { $('#cartDrawer').removeClass('open'); $('#cartOverlay').removeClass('open'); }
 function removeCartItem(i) { cart.splice(i, 1); renderCartDrawer(); updateCartBadge(); }
+// Change a line's quantity in the cart: the − / + buttons, or a number typed in the box.
+// The lowest is 1; the ✕ removes the line.
+function setCartQty(i, q) {
+    if (!cart[i]) return;
+    q = Math.floor(Number(q));
+    if (!(q >= 1)) q = 1;
+    if (q > 100000) q = 100000;
+    cart[i].quantity = q;
+    renderCartDrawer();
+    updateCartBadge();
+}
+function stepCartQty(i, d) { if (cart[i]) setCartQty(i, cart[i].quantity + d); }
+$(document).on('change', '.cart-qty-input', function () { setCartQty(Number($(this).data('i')), this.value); });
+$(document).on('keydown', '.cart-qty-input', function (e) { if (e.key === 'Enter') { e.preventDefault(); $(this).trigger('change'); } });
 
 function renderCartDrawer() {
     if (!cart.length) { $('#cartItems').html('<p style="color:#888;text-align:center;">Your cart is empty.</p>'); $('#cartTotalQty').text(0); $('.submit-order-btn').prop('disabled', false); return; }
@@ -1254,8 +1274,11 @@ function renderCartDrawer() {
             '<div><b>' + item.productName + '</b><br>' +
             (g ? '<span class="moq-short-msg">Must meet the minimum of ' + g.q + (m.apparel ? ' per design' : '') + ' (' + g.qty + ' in cart)</span>' : '') +
             '<span style="font-size:11px;color:#666;">' + (item.rin ? 'RIN: ' + item.rin + ' · ' : '') + 'SKU: ' + item.sku + ' · Size: ' + item.size + (item.color ? ' · Color: ' + item.color : '') + (item.artId ? ' · Art: ' + item.artId : '') + '</span></div>' +
-            '<div style="display:flex;align-items:center;gap:10px;"><span style="text-align:right;">×' + item.quantity +
-            '<br><span style="font-size:11px;color:#666;">' + (item.cost ? '$' + (item.cost * item.quantity).toFixed(2) : 'no price') + '</span></span><button onclick="removeCartItem(' + i + ')" style="background:none;border:none;color:#c62828;cursor:pointer;font-size:16px;">✕</button></div>' +
+            '<div style="display:flex;align-items:center;gap:10px;"><span style="text-align:right;">' +
+            '<span class="cart-qty"><button type="button" class="cq-btn" onclick="stepCartQty(' + i + ',-1)" aria-label="One less"' + (item.quantity <= 1 ? ' disabled' : '') + '>\u2212</button>' +
+            '<input type="number" min="1" class="cart-qty-input" data-i="' + i + '" value="' + item.quantity + '" aria-label="Quantity">' +
+            '<button type="button" class="cq-btn" onclick="stepCartQty(' + i + ',1)" aria-label="One more">+</button></span>' +
+            '<br><span style="font-size:11px;color:#666;">' + (item.cost ? '$' + (item.cost * item.quantity).toFixed(2) : 'no price') + '</span></span><button onclick="removeCartItem(' + i + ')" title="Remove this line" style="background:none;border:none;color:#c62828;cursor:pointer;font-size:16px;">✕</button></div>' +
             '</div>';
     }).join('');
     $('#cartItems').html(moqWarningsHtml() + html);
