@@ -539,6 +539,7 @@
         .qty-total .min.moq { font-weight: 700; color: #3a4a9a; }
         .qty-total .min.moq.short { color: var(--error); }
         .moq-chip { font-size: 10px; font-weight: 700; padding: 1px 7px; border-radius: 8px; background: #fff1dc; color: #8a5200; }
+        .lead-chip { font-size: 10px; font-weight: 700; padding: 1px 7px; border-radius: 8px; background: #e8f3ec; color: #1e5b34; }
         .rv-moq { background: #fff4e5; border: 1px solid #f0b46a; color: #7a4a00; border-radius: 8px; padding: 10px 12px; margin-top: 10px; font-size: 13px; }
         .qty-wrap.field-error-box { border-color: #e57373; background: var(--error-bg); }
         @media (max-width: 600px) { .qty-wrap { grid-column: 1 / -1; } .qty-total { margin-left: 0; flex-basis: 100%; text-align: left; } }
@@ -2040,7 +2041,11 @@ function retailOf(style) {
     return hit ? Number(hit[4]) : null;
 }
 function moqSafe(style) { return typeof moqFor === 'function' ? moqFor(style) : null; }
-function moqChipHtml(style) { var m = moqSafe(style); return m ? '<span class="moq-chip">MOQ ' + m.q + '</span>' : ''; }
+function moqChipHtml(style) {
+    var m = moqSafe(style), lt = typeof leadTimeFor === 'function' ? leadTimeFor(style) : '';
+    return (m ? '<span class="moq-chip">MOQ ' + m.q + '</span>' : '') +
+        (lt ? '<span class="lead-chip" title="How long it takes once it\u2019s ordered (after the art is approved)">Lead time ' + esc(lt) + '</span>' : '');
+}
 function sketchMoqQty($card, key) {
     var qty = 0, rows = 0;
     $card.find('.garment-row').each(function () {

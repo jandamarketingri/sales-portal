@@ -1120,11 +1120,14 @@ function moqPillHtml(style) {
     var m = moqSafe(style);
     return m ? '<span class="tier-moq">MOQ ' + m.q + '</span>' : '';
 }
+function leadTimeSafe(style) { return typeof leadTimeFor === 'function' ? leadTimeFor(style) : ''; }
 function moqLineHtml(style) {
-    var m = moqSafe(style);
-    if (!m) return '';
-    return '<div class="moq-line"><span class="moq-badge">Minimum ' + m.q + (m.apparel ? ' per design' : '') + '</span>' +
-        (m.note ? '<span class="moq-note">' + rinEsc(m.note) + '</span>' : '') + '</div>';
+    var m = moqSafe(style), lt = leadTimeSafe(style);
+    if (!m && !lt) return '';
+    return '<div class="moq-line">' +
+        (m ? '<span class="moq-badge">Minimum ' + m.q + (m.apparel ? ' per design' : '') + '</span>' : '') +
+        (lt ? '<span class="lead-badge" title="How long it takes once it\u2019s ordered. Order at least this far ahead.">\u23F1 Lead time ' + rinEsc(lt) + '</span>' : '') +
+        (m && m.note ? '<span class="moq-note">' + rinEsc(m.note) + '</span>' : '') + '</div>';
 }
 function moqGroupKey(it, m) { return m.key + '|' + (it.artId || ''); }
 /** Cart groups below their minimum. Apparel lines with the same art and ink-color tier
@@ -1159,6 +1162,7 @@ function ensureMoqStyles() {
         '.moq-line:empty { display: none; } .moq-line .moq-line { margin: 0; }' +
         '.moq-badge { display: inline-block; background: #f1eaf7; color: #4a2e6b; border: 1px solid #d9c8ea; border-radius: 12px; padding: 3px 10px; font-size: 13px; font-weight: 700; }' +
         '.moq-note { font-size: 12px; color: #666; }' +
+        '.lead-badge { display: inline-block; background: #e8f3ec; color: #1e5b34; border: 1px solid #bfdcc9; border-radius: 12px; padding: 3px 10px; font-size: 13px; font-weight: 700; }' +
         '.price-line { font-size: 13px; color: #444; margin: 4px 0 2px; } .price-line b { color: #222; }' +
         '.moq-warn { background: #fdecea; border: 1px solid #e57373; color: #b71c1c; border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; font-size: 13px; }' +
         '.moq-warn > b { display: block; margin-bottom: 4px; } .moq-warn-sub { font-size: 11px; margin-top: 6px; color: #b71c1c; }' +

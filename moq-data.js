@@ -69,3 +69,28 @@ function moqFor(style) {
     }
     return null;
 }
+
+/* Lead times from the NEX DSD Item Details sheet (Nov 18 2026 meeting): how long
+ * an item takes once it's ordered, so reps know how far ahead to order. Shown on
+ * the order pages and the art request form. Styles without the SVN / LNP prefix.
+ * Apparel isn't in that sheet: LEAD_TIME_APPAREL is used for every garment. */
+var LEAD_TIME_APPAREL = '4 weeks';
+var LEAD_TIMES = {
+    // 4 weeks
+    'J35-1': '4 weeks', 'J34-9': '4 weeks', 'J35-2': '4 weeks', 'J34-8': '4 weeks', 'J32-1': '4 weeks', 'J60-1': '4 weeks', 'J31-1': '4 weeks', 'J31-6': '4 weeks', 'J59-1': '4 weeks', 'J37-T': '4 weeks', 'J37-MAG': '4 weeks', 'BEAR10': '4 weeks', 'BEAR12': '4 weeks', 'BEAR6': '4 weeks', 'BEAR10HD': '4 weeks', 'BEAR12HD': '4 weeks', '632JD': '4 weeks', '634JD': '4 weeks', '632JDBA': '4 weeks', '212030BH': '4 weeks', '212036BH': '4 weeks', '600TS': '4 weeks', '600HS': '4 weeks', '003-7898-DE': '4 weeks', '003-4585-DE': '4 weeks', '003-4584-DE': '4 weeks', '003-0012-DE': '4 weeks', '003-2163-DE': '4 weeks', '003-5166-DE': '4 weeks', '024-6146 ASST': '4 weeks', '024-6146-AST': '4 weeks', '003-6416-DE': '4 weeks', 'PTCHCAP': '4 weeks',
+    // 2 weeks
+    'VD3.5': '2 weeks', 'VD6': '2 weeks', 'VD6X2': '2 weeks', 'VD10': '2 weeks', 'VD12X6': '2 weeks', 'VD12X12': '2 weeks', 'VD20T': '2 weeks', 'VD3SM': '2 weeks', 'VD6SM': '2 weeks', 'TS2': '2 weeks', 'TS3': '2 weeks', 'TS5': '2 weeks', 'SS1': '2 weeks', 'CL3': '2 weeks', 'CL5': '2 weeks', 'CL6X2': '2 weeks', 'CL16': '2 weeks', 'MAG-SM': '2 weeks', 'MAG6': '2 weeks', 'MAG8': '2 weeks', 'MAGEURO': '2 weeks', 'MAG10T': '2 weeks', 'MAG12': '2 weeks',
+    // 6 weeks
+    '300JD': '6 weeks', '301JD': '6 weeks', '301LG': '6 weeks', 'BOK01': '6 weeks', 'KCSTRP-100': '6 weeks', '3071': '6 weeks', '3220': '6 weeks', '3220E': '6 weeks', 'PCSS': '6 weeks', 'PCC': '6 weeks', 'JCUBE': '6 weeks', 'CUBE-KC': '6 weeks', 'TC825-WH': '6 weeks', 'PC06': '6 weeks', 'PC09': '6 weeks', 'PC10': '6 weeks', 'PC11': '6 weeks', 'PC13': '6 weeks', 'TC701': '6 weeks', 'TC704': '6 weeks', 'TWLCAP': '6 weeks', 'TWL36CAP': '6 weeks',
+    // 3–5 days
+    '1081103': '3–5 days', '1081105': '3–5 days', '1081100': '3–5 days', '1081101': '3–5 days', '1081104': '3–5 days', '1081102': '3–5 days'
+};
+
+/** Lead time for a style such as "SVNTEE3-5-1" or "LNPPC09" ("6 weeks"), or '' if unknown. */
+function leadTimeFor(style) {
+    var s = String(style || '').toUpperCase().replace(/^(SVN|LNP)/, '');
+    if (/^[A-Z]+\d-\d-\d$/.test(s)) return LEAD_TIME_APPAREL;
+    var keys = Object.keys(LEAD_TIMES);
+    for (var i = 0; i < keys.length; i++) if (keys[i].toUpperCase() === s) return LEAD_TIMES[keys[i]];
+    return '';
+}
