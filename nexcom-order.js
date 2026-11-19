@@ -327,6 +327,16 @@ function catalogArtFor(key) {
     return list.filter(function (d) { return d.styles && d.styles.some(function (s) { return s.toUpperCase() === core; }); });
 }
 /** Picture for a design in the list and preview: the catalog's own, or the Art Library's. */
+/* Which picture of the art goes with the order confirmation email (NexcomOrders.gs
+ * attaches it): an approved request's proof, an Art Library file (a low-res copy),
+ * or a catalog design's pictures. The server checks each one before attaching it. */
+function artFileRef(a) {
+    if (!a) return null;
+    if (a.requestId) return { kind: 'request', id: a.requestId };
+    if (a.source === 'catalog') return { kind: 'catalog', paths: (a.img || []).slice(0, 3) };
+    if (a.thumbId) return { kind: 'library', id: a.thumbId };
+    return null;
+}
 function artThumb(a) { return !a ? '' : (a.th || (a.img && a.img[0]) || thumbFor(a.thumbId)); }
 function artThumbStyle(a) {
     var t = artThumb(a);
@@ -998,6 +1008,7 @@ function addGridToCart(garmentType) {
                 style: tier.baseSKU, styleDesc: tier.description,
                 color: st.color, artId: st.art ? (st.art.erpId || st.art.id) : '', artLabel: st.art ? (st.art.source === 'catalog' ? 'Catalog design: ' : '') + st.art.label : '',
                 artRequestId: st.art && st.art.requestId ? st.art.requestId : '',
+                artFile: artFileRef(st.art),
                 cost: costFor(tier.baseSKU, sz, tier.skus[sz], tier.prices[sz])
             });
             addedAny = true;
@@ -1093,6 +1104,7 @@ function addHardgoodToCart(key) {
         style: rec.baseSKU, styleDesc: rec.description,
         color: hardgoodColorValue(st), artId: st.art ? (st.art.erpId || st.art.id) : '', artLabel: st.art ? (st.art.source === 'catalog' ? 'Catalog design: ' : '') + st.art.label : '',
         artRequestId: st.art && st.art.requestId ? st.art.requestId : '',
+        artFile: artFileRef(st.art),
         cost: costFor(rec.baseSKU, 'OS', rec.skus.OS || rec.baseSKU, rec.prices.OS || rec.prices.S)
     });
     $('#qty-' + key).val(0);
