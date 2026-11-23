@@ -89,6 +89,18 @@
         .action-block .num-row input.js-lic-other { grid-column: 2; width: 70px; padding: 6px; font-family: 'DM Mono', monospace; font-size: 13px; text-transform: uppercase; margin: 0; text-align: center; }
         .num-row .hint.lic-why { grid-column: 1 / -1; width: auto; margin: 0; font-size: 12px; }
         .num-row .hint { width: 100%; }
+        .action-block .num-row select.js-assign-sel { grid-column: 1 / -1; width: 100%; padding: 6px 8px; font-size: 13px; margin: 0; }
+        .sk-picks { display: flex; flex-direction: column; gap: 4px; margin: 2px 0 10px; font-size: 13.5px; }
+        .sk-picks label { display: flex; gap: 8px; align-items: center; cursor: pointer; margin: 0; }
+        .sk-picks .pill { font-size: 10.5px; padding: 1px 8px; }
+        .sk-picks b, .sk-picks .hint { white-space: nowrap; }
+        .sk-proof { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+        .sk-proof a { width: 84px; text-decoration: none; color: inherit; }
+        .sk-proof .thumb { width: 84px; height: 84px; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; display: flex; align-items: center; justify-content: center; background: var(--surface-2); font-size: 24px; }
+        .sk-proof .thumb img { width: 100%; height: 100%; object-fit: contain; }
+        .sk-proof .nm { font-size: 11px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+        .sketch .who { font-size: 12px; color: var(--text-muted); }
+        .sketch .hd .pill { margin-left: auto; }
         .variant-tag { display: inline-block; font-size: 12px; font-weight: 700; color: #1f3d63; background: #e6f0fb; border: 1px solid #c9ddf5; border-radius: 10px; padding: 1px 8px; white-space: nowrap; }
         .num-box .num-row > .variant-tag { grid-column: 1 / -1; justify-self: end; }
         .on-pair { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; margin-right: 6px; }
@@ -261,8 +273,30 @@ var PROOF_EXT = /\.(pdf|jpe?g|png|gif|webp)$/i;   // proofs go to reps and buyer
 
 var STATUS_CLASS = {
     'Submitted': 'st-submitted', 'In Art': 'st-inart', 'Proof Ready': 'st-proof', 'Revise': 'st-revise',
-    'On Hold': 'st-hold', 'Licensing': 'st-licensing', 'Ready to Order': 'st-ready', 'Ordered': 'st-ordered', 'Cancelled': 'st-cancelled'
+    'On Hold': 'st-hold', 'Licensing': 'st-licensing', 'Ready to Order': 'st-ready', 'Ordered': 'st-ordered', 'Cancelled': 'st-cancelled',
+    'Approved': 'st-ready'   // a sketch's own stage
 };
+// Sketch by sketch (Nov 23 2026): each sketch has its own designer and stage.
+var SK_ASSIGNABLE = ['Submitted', 'In Art', 'Revise'];
+function sketchesOf(q) { return ((q.data || {}).sketches || []).map(function (s, i) { if (!s.number) s.number = i + 1; return s; }); }
+function inStage(q, stages) { return sketchesOf(q).filter(function (s) { return stages.indexOf(s.stage) !== -1; }); }
+function skLabel(list) {
+    var n = list.map(function (s) { return s.number; }).sort(function (a, b) { return a - b; });
+    return n.length === 1 ? 'Sketch ' + n[0] : 'Sketches ' + n.slice(0, -1).join(', ') + ' and ' + n[n.length - 1];
+}
+// Checkboxes to choose which sketches an action is for (all ticked to start, unless off(s)).
+function skPicks(group, list, off) {
+    if (!list.length) return '';
+    if (list.length === 1 && sketchesOf(curReq).length === 1) return '<input type="checkbox" class="sk-pick" data-group="' + group + '" value="' + list[0].number + '" checked hidden>';
+    return '<div class="sk-picks">' + list.map(function (s) {
+        return '<label><input type="checkbox" class="sk-pick" data-group="' + group + '" value="' + s.number + '"' + (off && off(s) ? '' : ' checked') + '> ' +
+            '<b>Sketch ' + s.number + '</b> <span class="art-num">' + esc(sketchNumber(s) || '') + '</span>' +
+            (s.proof && s.proof.v ? ' <span class="hint" style="margin:0;">proof v' + esc(s.proof.v) + '</span>' : '') +
+            ' <span class="pill ' + (STATUS_CLASS[s.stage] || '') + '">' + esc(s.stage) + '</span></label>';
+    }).join('') + '</div>';
+}
+function pickedSketches(group) { return $('.sk-pick[data-group="' + group + '"]:checked').map(function () { return +this.value; }).get(); }
+var curReq = null;
 var TABS = ['Submitted', 'In Art', 'Proof Ready', 'Revise', 'On Hold', 'Licensing', 'Ready to Order', 'Ordered', 'Cancelled'];
 
 var auth = null, me = null, numberInfo = { prefixes: {}, licensedSuffix: 'NY' };
@@ -310,11 +344,12 @@ function checkSession(r) {
 // ── Whose turn is it? ─────────────────────────────────────────────────────────
 function waitingOn(r, u) {
     var mine = r.isMine;
+    if (u.isArt && r.myArtTurn && ['On Hold', 'Ordered', 'Cancelled'].indexOf(r.status) === -1) return { who: 'You: proofs for your sketches', me: true };
     switch (r.status) {
         case 'Submitted':      return { who: 'Art Admin to assign', me: u.isArtAdmin };
-        case 'In Art':         return r.assignedToMe ? { who: 'You: create the proofs', me: true }
+        case 'In Art':         return (r.myArtTurn === undefined ? r.assignedToMe : r.myArtTurn) ? { who: 'You: create the proofs', me: true }
                                       : { who: (u.isStaff && r.assignedTo ? r.assignedTo : 'Designer') + ' working on proofs', me: false };
-        case 'Revise':         return r.assignedToMe ? { who: 'You: make the revisions', me: true }
+        case 'Revise':         return (r.myArtTurn === undefined ? r.assignedToMe : r.myArtTurn) ? { who: 'You: make the revisions', me: true }
                                       : { who: (u.isStaff && r.assignedTo ? r.assignedTo : 'Designer') + ' making revisions', me: false };
         case 'Proof Ready':    return { who: mine ? 'You: review the proofs' : 'Rep to review proofs', me: mine };
         case 'Licensing':      return { who: u.isArtAdmin ? 'You: send to licensing, then mark it approved here' : u.isLicensing ? 'You: licensing review' : 'Licensing review', me: u.isArtAdmin || u.isLicensing };
@@ -451,6 +486,7 @@ function loadDetail(id) {
 }
 
 function renderDetail(q, buckets) {
+    curReq = q;
     var d = q.data || {};
     var w = waitingOn(q, me);
     var h = '<a class="crumb js-back" href="art-requests.html">← All art requests</a>';
@@ -474,7 +510,8 @@ function renderDetail(q, buckets) {
         (d.preferredMarks ? '<div class="desc"><b>Preferred marks/logos:</b> ' + esc(d.preferredMarks) + '</div>' : '') +
         filesLine('Attachments', d.generalAttachments) + '</div>';
     h += orderCardHtml(q);
-    h += '<div class="card"><h3>✏️ Sketches<span class="right">' + (d.sketches || []).length + '</span></h3>' + (d.sketches || []).map(sketchHtml).join('') + '</div>';
+    h += '<div class="card"><h3>✏️ ' + (me.isArtistOnly && (q.mySketches || []).length < q.sketchCount ? 'Your sketches' : 'Sketches') + '<span class="right">' + (d.sketches || []).length +
+        (me.isArtistOnly && (q.mySketches || []).length < q.sketchCount ? ' of ' + q.sketchCount : '') + '</span></h3>' + sketchesOf(q).map(sketchHtml).join('') + '</div>';
     h += '</div><div>';
     h += actionsHtml(q, buckets);
     h += '<div class="card"><h3>🕒 Activity</h3><ul class="log">' + (q.activity || []).slice().reverse().map(function (a) {
@@ -491,34 +528,47 @@ function renderDetail(q, buckets) {
 }
 
 function proofsHtml(q) {
-    var proofs = (q.activity || []).filter(function (a) { return /^Proof v\d+/.test(a.event) && a.files && a.files.length; });
-    if (!proofs.length) {
+    var withProof = sketchesOf(q).filter(function (s) { return s.proof && s.proof.files && s.proof.files.length; });
+    var events = (q.activity || []).filter(function (a) { return /^Proof v\d+/.test(a.event) && a.files && a.files.length; });
+    if (!withProof.length && !events.length) {
         return '<div class="card"><h3>🖼️ Proofs</h3><div class="hint" style="margin:0;">No proofs yet.' +
             (q.proofsDue ? ' Projected by <b>' + esc(q.proofsDue) + '</b>.' : '') + '</div></div>';
     }
-    var latest = proofs[proofs.length - 1];
-    var h = '<div class="card"><h3>🖼️ Proofs<span class="right">' + esc(latest.event.replace(' uploaded', '')) + ' · ' + esc(fmtDate(latest.at)) + '</span></h3>';
-    if (latest.message) h += '<div class="msg" style="font-size:13.5px;background:var(--surface-2);padding:8px 10px;border-radius:6px;margin-bottom:12px;">' + esc(latest.message) + '</div>';
-    h += '<div class="proof-grid">' + latest.files.map(function (f) {
-        return '<a class="proof" href="' + esc(f.url) + '" target="_blank" rel="noopener"><div class="thumb">' +
-            '<img src="https://drive.google.com/thumbnail?id=' + encodeURIComponent(f.id) + '&sz=w600" alt="" onerror="this.parentNode.innerHTML=\'📄\'"></div>' +
-            '<div class="nm">' + esc(f.name) + '</div></a>';
-    }).join('') + '</div>';
-    if (proofs.length > 1) {
-        h += '<details class="older"><summary>Earlier versions (' + (proofs.length - 1) + ')</summary><ul>' +
-            proofs.slice(0, -1).reverse().map(function (p) {
-                return '<li>' + esc(p.event.replace(' uploaded', '')) + ' · ' + esc(fmtDate(p.at)) + ': ' + p.files.map(fileLink).join(', ') + '</li>';
+    if (!withProof.length) {   // shouldn't happen, but older data may only have the activity
+        var e = events[events.length - 1];
+        withProof = [{ number: 0, stage: q.status, proof: { v: (/^Proof v(\d+)/.exec(e.event) || [])[1], files: e.files, at: e.at } }];
+    }
+    withProof.sort(function (a, b) { return (b.stage === 'Proof Ready') - (a.stage === 'Proof Ready') || a.number - b.number; });
+    var single = sketchesOf(q).length <= 1;
+    var h = '<div class="card"><h3>🖼️ Proofs' + (single ? '<span class="right">v' + esc(withProof[0].proof.v) + (withProof[0].proof.at ? ' · ' + esc(fmtDate(withProof[0].proof.at)) : '') + '</span>' : '') + '</h3>';
+    withProof.forEach(function (s) {
+        if (!single) h += '<div class="lbl" style="margin:10px 0 6px;">' + (s.number ? 'Sketch ' + s.number + ' · ' : '') + 'v' + esc(s.proof.v) +
+            (s.proof.at ? ' · ' + esc(fmtDate(s.proof.at)) : '') + ' <span class="pill ' + (STATUS_CLASS[s.stage] || '') + '" style="font-size:10.5px;">' + esc(s.stage) + '</span></div>';
+        h += '<div class="proof-grid">' + s.proof.files.map(function (f) {
+            return '<a class="proof" href="' + esc(f.url) + '" target="_blank" rel="noopener"><div class="thumb">' +
+                '<img src="https://drive.google.com/thumbnail?id=' + encodeURIComponent(f.id) + '&sz=w600" alt="" onerror="this.parentNode.innerHTML=\'📄\'"></div>' +
+                '<div class="nm">' + esc(f.name) + '</div></a>';
+        }).join('') + '</div>';
+    });
+    var latestIds = {};
+    withProof.forEach(function (s) { (s.proof.files || []).forEach(function (f) { latestIds[f.id] = 1; }); });
+    var older = events.filter(function (p) { return !p.files.some(function (f) { return latestIds[f.id]; }); });
+    if (older.length) {
+        h += '<details class="older"><summary>Earlier versions (' + older.length + ')</summary><ul>' +
+            older.slice().reverse().map(function (p) {
+                return '<li>' + esc(p.event.replace(' uploaded', '').replace(/ · .*approved automatically.*$/, '')) + ' · ' + esc(fmtDate(p.at)) + ': ' + p.files.map(fileLink).join(', ') + '</li>';
             }).join('') + '</ul></details>';
     }
     return h + '</div>';
 }
 
 function sketchHtml(s, i) {
+    var n = s.number || i + 1;
     var items = (s.items || []).map(function (it) {
         return esc(it.description || it.style) + (it.color ? ' — ' + esc(it.color) : '') +
             (it.parentRin ? ' <span class="item-rin" title="' + esc((it.rins || []).map(function (x) { return (x[0] ? x[0] + ' ' : 'RIN ') + x[1]; }).join(' · ')) + '">Parent RIN ' + esc(it.parentRin) + '</span>' : '');
     }).join('<br>');
-    return '<div class="sketch"><div class="hd"><span class="num">' + (i + 1) + '</span>' +
+    return '<div class="sketch"><div class="hd"><span class="num">' + n + '</span>' +
         '<b>' + ((s.artNumber || s.artType === 'inks') ? '<span class="art-num" title="Art #">' + esc(s.artNumber || s.referToArt) + '</span>'
                              : '<span class="tag grey" title="Every sketch gets its own art # when the Art Admin assigns it">Art # pending</span>') +
         (s.artType === 'new' ? ' <span class="based-on">New design</span>' :
@@ -528,7 +578,9 @@ function sketchHtml(s, i) {
         (s.priceTier ? '<span class="tag grey">' + esc(s.priceTier) + '</span>' : '') +
         (s.artType === 'inks' ? '<span class="tag grey">No licensing (inks only)</span>' :
          s.licenseSuffix ? (s.licenseSuffix === 'XX' ? '<span class="tag grey">Not licensed</span>' : '<span class="tag">Licensing: ' + esc(licenseLabel(s.licenseSuffix)) + '</span>')
-                         : (s.needsLicensing ? '<span class="tag">Licensing</span>' : '')) + '</div>' +
+                         : (s.needsLicensing ? '<span class="tag">Licensing</span>' : '')) +
+        (s.stage && sketchesOf(curReq || {}).length > 1 ? '<span class="pill ' + (STATUS_CLASS[s.stage] || '') + '">' + esc(s.stage) + '</span>' : '') + '</div>' +
+        (me && me.isStaff && sketchesOf(curReq || {}).length > 1 ? '<div class="who">' + (s.assignedTo ? 'Designer: <b>' + esc(s.assignedTo) + '</b>' : 'Not assigned yet') + '</div>' : '') +
         '<div class="row"><b>Items</b><br>' + items + '</div>' +
         '<div class="row"><b>Locations</b>' + esc((s.locations || []).map(locText).join(' + ')) + '</div>' +
         '<div class="row"><b>Inks</b>' + esc((s.inkColors || []).join(', ') || '—') + '</div>' +
@@ -550,8 +602,13 @@ function actionsHtml(q, buckets) {
             '<div class="copy-row"><input type="text" id="buyerLink" readonly value="' + esc(q.buyerLink) + '">' +
             '<button type="button" class="btn-secondary btn-sm" id="copyBuyerLink">Copy</button></div></div>');
     }
-    if ((mine || me.isAdmin) && st === 'Proof Ready') {
+    var waiting = inStage(q, ['Proof Ready']);
+    if ((mine || me.isAdmin) && st === 'Proof Ready' && waiting.length) {
+        var others = sketchesOf(q).length - waiting.length;
         blocks.push('<div class="action-block"><div class="lbl">Approve for the store</div>' +
+            (sketchesOf(q).length > 1 ? '<div class="hint">' + skLabel(waiting) + (waiting.length === 1 ? ' has a proof' : ' have proofs') + ' waiting. Tick the ones the buyer approved' +
+                (others ? '. The other sketches come separately as their proofs are ready' : '') + '.</div>' : '') +
+            skPicks('review', waiting) +
             '<div class="hint">Who at the store approved these proofs? This is saved with the request.</div>' +
             '<div class="ap-grid">' +
               '<label>Approved by<input type="text" id="apName" placeholder="Buyer’s name" maxlength="80"></label>' +
@@ -564,7 +621,7 @@ function actionsHtml(q, buckets) {
             '<div class="file-drop" id="apDrop" style="padding:6px 10px;"><button type="button" class="btn-secondary btn-sm js-pick">📎 Attach the buyer’s OK</button>' +
               '<span class="hint" style="margin:0;">Optional: a screenshot or photo of their email or text</span><input type="file" multiple hidden accept="image/*,.pdf,.eml,.msg"><div class="file-list"></div></div>' +
             '<div class="btn-row" style="margin-bottom:14px;"><button class="btn-primary" data-op="approve" data-files="#apDrop">✓ Approve proofs</button></div>' +
-            '<div class="lbl">Or ask for changes</div>' +
+            '<div class="lbl">Or ask for changes' + (waiting.length > 1 ? ' to the ticked sketches' : '') + '</div>' +
             '<textarea id="reviseMsg" placeholder="What needs to change? e.g. Move the logo down 1 inch. Change ink 2 to gold."></textarea>' +
             '<button class="btn-secondary" data-op="revise" data-msg="#reviseMsg">Request revision</button></div>');
     }
@@ -576,34 +633,57 @@ function actionsHtml(q, buckets) {
             '<div class="btn-row">' + (page ? '<a class="btn-primary" href="' + page + '">Go to ' + esc(q.account) + ' ordering</a>' : '') +
             '<button class="btn-secondary" data-op="ordered">Mark ordered</button></div></div>');
     }
-    if (me.isArtAdmin && ['Submitted', 'In Art', 'Revise', 'On Hold'].indexOf(st) !== -1) {
-        blocks.push('<div class="action-block"><div class="lbl">' + (q.assignedTo ? 'Reassign' : 'Assign') + '</div>' +
-            '<select id="assignTo"><option value="">Choose who works on this…</option>' + buckets.map(function (b) {
-                return '<option' + (b === q.assignedTo ? ' selected' : '') + '>' + esc(b) + '</option>';
-            }).join('') + '</select>' +
-            assignNumbersHtml(q) +
-            '<input type="text" id="assignNote" placeholder="Note for the designer (optional)">' +
+    var assignable = inStage(q, SK_ASSIGNABLE);
+    if (me.isArtAdmin && !closed && assignable.length) {
+        var multi = sketchesOf(q).length > 1;
+        var opts = function (sel, first) {
+            return '<option value="">' + first + '</option>' + buckets.map(function (b) {
+                return '<option' + (b === sel ? ' selected' : '') + '>' + esc(b) + '</option>';
+            }).join('');
+        };
+        var anyAssigned = assignable.some(function (s) { return s.assignedTo; });
+        var common = assignable.every(function (s) { return s.assignedTo === assignable[0].assignedTo; }) ? assignable[0].assignedTo : '';
+        blocks.push('<div class="action-block"><div class="lbl">' + (anyAssigned ? 'Reassign' : 'Assign') + '</div>' +
+            (multi ? '<div class="hint">Each sketch can go to a different designer, for example in-house for the harder designs and India for the simpler ones. ' +
+                'Pick one person for all of them here, or change any sketch below.</div>' : '') +
+            '<select id="assignTo">' + opts(common, multi ? 'Same designer for every sketch…' : 'Choose who works on this…') + '</select>' +
+            assignNumbersHtml(q, buckets) +
+            '<input type="text" id="assignNote" placeholder="Note for the designer(s) (optional)">' +
             '<div class="btn-row"><button class="btn-' + (st === 'Submitted' ? 'primary' : 'secondary') + '" data-op="assign">Assign</button>' +
-            (buckets.indexOf(me.name) !== -1 && !q.assignedToMe ? '<button class="btn-secondary" data-op="assign" data-self="1">✋ Assign to me</button>' : '') +
+            (buckets.indexOf(me.name) !== -1 && !assignable.every(function (s) { return s.assignedTo === me.name; }) ? '<button class="btn-secondary" data-op="assign" data-self="1">✋ Assign ' + (multi ? 'all' : '') + ' to me</button>' : '') +
             '</div></div>');
     }
-    // Only the person the request is assigned to (the artist, or the Art Admin if he took it himself).
-    if (me.isArt && q.assignedToMe && ['In Art', 'Revise', 'Proof Ready'].indexOf(st) !== -1) {
-        blocks.push('<div class="action-block"><div class="lbl">' + (st === 'Proof Ready' ? 'Send a corrected proof' : 'Send proofs to the rep') + '</div>' +
+    // Proofs: an artist for the sketches assigned to them; the Art Admin for any sketch.
+    var proofable = inStage(q, ['In Art', 'Revise', 'Proof Ready']).filter(function (s) {
+        return me.isArtAdmin && !me.isArtistOnly ? true : (q.mySketches || []).indexOf(s.number) !== -1;
+    });
+    if (me.isArt && !closed && st !== 'On Hold' && proofable.length) {
+        var allProofed = proofable.every(function (s) { return s.stage === 'Proof Ready'; });
+        blocks.push('<div class="action-block"><div class="lbl">' + (allProofed ? 'Send a corrected proof' : 'Send proofs to the rep') + '</div>' +
+            (proofable.length > 1 || sketchesOf(q).length > 1 ? '<div class="hint">Which sketch' + (proofable.length > 1 ? 'es are' : ' is') + ' in these files? Send each sketch as soon as it’s ready; you don’t have to wait for the others.</div>' : '') +
+            skPicks('proof', proofable, function (s) { return s.stage === 'Proof Ready'; }) +
             '<div class="file-drop" id="proofDrop"><button type="button" class="btn-secondary btn-sm js-pick">📎 Choose proof files</button><span class="hint" style="margin:0;">PDF, JPG or PNG only (no .ai, .eps, .psd or .svg), up to ' + MAX_FILE_MB + ' MB each</span><input type="file" multiple hidden accept=".pdf,.jpg,.jpeg,.png,.gif,.webp"><div class="file-list"></div></div>' +
             '<textarea id="proofMsg" placeholder="Note to the rep (optional). Your name isn’t shown, emails come from the Art Department."></textarea>' +
             '<button class="btn-primary" data-op="proof" data-msg="#proofMsg" data-files="#proofDrop">Send proofs</button></div>');
     }
-    if ((me.isArtAdmin || me.isLicensing) && st === 'Licensing') {
+    var licWaiting = inStage(q, ['Licensing']);
+    if ((me.isArtAdmin || me.isLicensing) && licWaiting.length) {
         var lp = (q.activity || []).filter(function (a) { return /^Proof v\d+/.test(a.event) && a.files && a.files.length; }).pop();
+        var dl = function (f) { return '<a class="btn-secondary btn-sm" target="_blank" rel="noopener" href="https://drive.google.com/uc?export=download&id=' + encodeURIComponent(f.id) + '">⬇ ' + esc(f.name) + '</a>'; };
+        var licFiles = licWaiting.map(function (s) {
+            var files = (s.proof && s.proof.files && s.proof.files.length) ? s.proof.files : null;
+            if (!files) return '';
+            return '<div class="lic-files"><b>' + (sketchesOf(q).length > 1 ? 'Sketch ' + s.number + ' · ' : '') + 'Proof v' + esc(s.proof.v) + ' (approved)</b>' + files.map(dl).join('') + '</div>';
+        }).join('');
+        if (!licFiles && lp) licFiles = '<div class="lic-files"><b>' + esc(lp.event.replace(' uploaded', '')) + ' (approved)</b>' + lp.files.map(dl).join('') + '</div>';
         blocks.push('<div class="action-block"><div class="lbl">Licensing</div>' +
-            '<div class="hint">1. Download the approved proof and send it to licensing.<br>2. When licensing approves it, mark it approved here. The rep is emailed and can place the order.</div>' +
-            orderNumbersHtml(q.data || {}, 'Art #') +
-            (lp ? '<div class="lic-files"><b>' + esc(lp.event.replace(' uploaded', '')) + ' (approved)</b>' + lp.files.map(function (f) {
-                return '<a class="btn-secondary btn-sm" target="_blank" rel="noopener" href="https://drive.google.com/uc?export=download&id=' + encodeURIComponent(f.id) + '">⬇ ' + esc(f.name) + '</a>';
-            }).join('') + '</div>' : '') +
+            '<div class="hint">1. Download the approved proof and send it to licensing.<br>2. When licensing approves it, mark it approved here. ' +
+            (sketchesOf(q).length > licWaiting.length ? 'The order is released once every sketch is approved.' : 'The rep is emailed and can place the order.') + '</div>' +
+            skPicks('lic', licWaiting) +
+            orderNumbersHtml({ sketches: sketchesOf(q).map(function (s) { return s.stage === 'Licensing' ? s : {}; }) }, 'Art #') +
+            licFiles +
             '<input type="text" id="licNote" placeholder="Licensing reference or note (optional)">' +
-            '<div class="btn-row" style="margin-bottom:14px;"><button class="btn-primary" data-op="licensed" data-msg="#licNote" data-confirm="Mark this art as approved by licensing? The rep will be told it\u2019s ready to order.">✓ Licensing approved</button></div>' +
+            '<div class="btn-row" style="margin-bottom:14px;"><button class="btn-primary" data-op="licensed" data-msg="#licNote" data-confirm="Mark the ticked art as approved by licensing?">✓ Licensing approved</button></div>' +
             '<div class="lbl">Or, if licensing wants changes</div>' +
             '<textarea id="licMsg" placeholder="If it can’t be licensed as is, say what has to change."></textarea>' +
             '<button class="btn-secondary" data-op="licenseRejected" data-msg="#licMsg">Send back for changes</button></div>');
@@ -629,8 +709,16 @@ function bindActions(q) {
     $('.file-drop').each(function () { bindDrop($(this)); });
     $('#apName, #apStore, #apDate').on('input change', function () { $(this).removeClass('field-error'); });
     $('.ap-chk').on('change', function () { $('.ap-checks').removeClass('field-error'); });
+    $('#assignTo').on('change', function () {
+        if (this.value) $('.js-assign-sel').val(this.value);
+        updateNumberPreview(q);
+    });
+    $('.js-assign-sel').on('change', function () {
+        var vals = $('.js-assign-sel').map(function () { return this.value; }).get();
+        $('#assignTo').val(vals.every(function (v) { return v === vals[0]; }) ? vals[0] : '');
+        updateNumberPreview(q);
+    });
     if ($('.num-box').length) {
-        $('#assignTo').on('change', function () { updateNumberPreview(q); });
         $('.js-lic-sel').on('change', function () {
             var $o = $('.js-lic-other[data-i="' + $(this).data('i') + '"]');
             $o.prop('hidden', this.value !== 'OTHER');
@@ -677,9 +765,21 @@ function bindActions(q) {
         }
         if ($b.data('confirm') && !confirm($b.data('confirm'))) return;
         if (op === 'assign') {
-            payload.assignTo = $b.data('self') ? me.name : $('#assignTo').val();
             payload.message = $('#assignNote').val().trim();
-            if (!payload.assignTo) return toast('Choose who should work on this.', true);
+            if ($('.js-assign-sel').length) {
+                var plan = {}, missing = [];
+                $('.js-assign-sel').each(function () {
+                    var v = $b.data('self') ? me.name : (this.value || $('#assignTo').val());
+                    if (v) plan[$(this).data('i')] = v; else missing.push(+$(this).data('i') + 1);
+                });
+                if (!Object.keys(plan).length) return toast('Choose who should work on each sketch.', true);
+                if (missing.length && !confirm(skLabel(missing.map(function (n) { return { number: n }; })) + (missing.length === 1 ? ' has' : ' have') +
+                    ' no designer picked and will wait. Assign the rest now?')) return;
+                payload.assign = plan;
+            } else {
+                payload.assignTo = $b.data('self') ? me.name : $('#assignTo').val();
+                if (!payload.assignTo) return toast('Choose who should work on this.', true);
+            }
             var sufs = {}, badSuf = false;
             $('.js-lic-sel').each(function () {
                 var i = $(this).data('i'), v = chosenSuffix(i);
@@ -688,6 +788,11 @@ function bindActions(q) {
             });
             if (badSuf) return toast('For “Other…”, type the 2-letter licensing suffix.', true);
             if ($('.js-lic-sel').length) payload.suffixes = sufs;
+        }
+        var grp = { approve: 'review', revise: 'review', proof: 'proof', licensed: 'lic', licenseRejected: 'lic' }[op];
+        if (grp && $('.sk-pick[data-group="' + grp + '"]').length) {
+            payload.sketches = pickedSketches(grp);
+            if (!payload.sketches.length) return toast('Tick at least one sketch.', true);
         }
         if (op === 'revise' && !payload.message) { $('#reviseMsg').focus(); return toast('Describe what needs to change.', true); }
         if (op === 'licenseRejected' && !payload.message) { $('#licMsg').focus(); return toast('Say what has to change.', true); }
@@ -700,8 +805,12 @@ function bindActions(q) {
             if ($('.ap-chk').not(':checked').length) { $('.ap-checks').addClass('field-error'); return toast('Tick every item in the checklist first.', true); }
             ap.confirmed = true;
             ap.date = fmtDate(ap.date + 'T12:00:00');
-            if (!confirm('Approve these proofs for ' + ap.store + ' (approved by ' + ap.name + ' on ' + ap.date + ')? ' +
-                (q.needsLicensing ? 'They’ll go to licensing next.' :
+            var apSk = sketchesOf(q).filter(function (s) { return (payload.sketches || []).indexOf(s.number) !== -1; });
+            var after = sketchesOf(q).filter(function (s) { return s.stage !== 'Approved' && apSk.indexOf(s) === -1; });
+            var lic = apSk.some(function (s) { return s.needsLicensing; });
+            if (!confirm('Approve ' + (sketchesOf(q).length > 1 ? skLabel(apSk) : 'these proofs') + ' for ' + ap.store + ' (approved by ' + ap.name + ' on ' + ap.date + ')? ' +
+                (after.length ? 'Still to come: ' + skLabel(after) + '.' + (lic ? ' Licensed art goes to licensing next.' : '') :
+                 lic ? 'Licensed art goes to licensing next.' :
                  (q.data && q.data.order && q.data.order.status === 'Awaiting Art') ? 'Order ' + q.data.order.po + ' will be released to production.' : 'The art will be ready to order.'))) return;
             payload.approval = ap;
         }
@@ -755,7 +864,7 @@ function orderCardHtml(q) {
                 '<td class="n">' + g.qty + '</td><td class="n">' + money(g.cost) + '</td></tr>';
         }).join('') + '</table>';
     if (o.status === 'Awaiting Art') {
-        h += '<div class="hint" style="margin-top:10px;">Goes to production automatically when the art is approved' + (q.needsLicensing ? ' and licensed' : '') + '.' +
+        h += '<div class="hint" style="margin-top:10px;">Goes to production automatically when ' + ((q.data.sketches || []).length > 1 ? 'every sketch is' : 'the art is') + ' approved' + (q.needsLicensing ? ' and licensed' : '') + '.' +
             (q.orderEditable ? ' You can change quantities and dates until the buyer approves the art.' : '') + '</div>';
         if (q.orderEditable) h += '<div class="btn-row"><button type="button" class="btn-secondary btn-sm" id="orderEditBtn">✎ Change quantities or dates</button></div>' +
             '<div id="orderEdit" style="display:none;"></div>';
@@ -893,11 +1002,22 @@ function suggestedSuffix(s) {
     return s.needsLicensing ? numberInfo.licensedSuffix : 'XX';
 }
 // Assign box: licensing for every sketch, and the new art # each one will get.
-function assignNumbersHtml(q) {
-    var d = q.data || {}, rows = [], anyNew = true;
-    (d.sketches || []).forEach(function (s, i) {
+function assignNumbersHtml(q, buckets) {
+    var d = q.data || {}, rows = [], anyNew = true, multi = sketchesOf(q).length > 1;
+    var who = function (s, i) {
+        if (!multi) return '';
+        return '<select class="js-assign-sel" data-i="' + i + '"><option value="">Designer for sketch ' + (i + 1) + '…</option>' + (buckets || []).map(function (b) {
+            return '<option' + (b === s.assignedTo ? ' selected' : '') + '>' + esc(b) + '</option>';
+        }).join('') + '</select>';
+    };
+    sketchesOf(q).forEach(function (s, i) {
+        if (SK_ASSIGNABLE.indexOf(s.stage) === -1) {   // proofs are out: stays with its designer
+            rows.push('<div class="num-row"><span class="on-sk">Sketch ' + (i + 1) + '</span><span class="art-num">' + esc(sketchNumber(s) || '') + '</span>' +
+                '<span class="hint lic-why">' + esc(s.assignedTo || 'Designer') + ' · ' + esc(s.stage) + ' (stays with this designer)</span></div>');
+            return;
+        }
         if (s.artType === 'inks') {   // keeps its art #, gets a variant, no licensing: nothing to choose
-            rows.push('<div class="num-row"><span class="on-sk">Sketch ' + (i + 1) + '</span>' +
+            rows.push('<div class="num-row"><span class="on-sk">Sketch ' + (i + 1) + '</span>' + who(s, i) +
                 '<span class="art-num">' + esc(s.artNumber || s.referToArt || '') + '</span>' +
                 '<span class="variant-tag">' + (s.variant ? 'Variant ' + s.variant : 'next variant # on assign') + '</span>' +
                 '<span class="hint lic-why">ink color change: same art #, no licensing</span></div>');
@@ -911,7 +1031,7 @@ function assignNumbersHtml(q) {
             (!isNew && /_[A-Z]{2}$/i.test(s.referToArt || '') && !refXXlic) ? 'same licensing as the original' :
             (s.needsLicensing ? 'rep said it has a base or branch name' : '');
         rows.push('<div class="num-row"><span class="on-sk">Sketch ' + (i + 1) + '</span>' +
-            '<span class="art-num js-num-preview" data-i="' + i + '" data-cur="' + esc(m ? m[1] : '') + '"></span>' +
+            '<span class="art-num js-num-preview" data-i="' + i + '" data-cur="' + esc(m ? m[1] : '') + '" data-sent="' + (s.proof && s.proof.v ? 1 : '') + '"></span>' + who(s, i) +
             (!isNew && s.referToArt ? '<span class="hint" style="margin:0;">based on ' + esc(s.referToArt) + '</span>' : '') +
             '<select class="js-lic-sel" data-i="' + i + '">' + LICENSE_TYPES.map(function (t) {
                 return '<option value="' + t[0] + '"' + (t[0] === suf ? ' selected' : '') + '>' + t[0] + ' · ' + esc(t[1]) + '</option>';
@@ -930,23 +1050,28 @@ function chosenSuffix(i) {
     return /^[A-Z]{2}$/.test(v || '') ? v : '';
 }
 function updateNumberPreview(q) {
-    var who = $('#assignTo').val(), info = numberInfo.prefixes[who];
-    var proofsSent = (q.proofVersion || 0) > 0;
+    var all = $('#assignTo').val();
+    var whoFor = function (i) { var v = $('.js-assign-sel[data-i="' + i + '"]').val(); return v || all || ''; };
+    var teams = {}, changes = 0, kept = 0;
     $('.js-num-preview').each(function () {
-        var $p = $(this), cur = $p.data('cur') || '', suf = chosenSuffix($p.data('i'));
+        var $p = $(this), i = $p.data('i'), cur = $p.data('cur') || '', suf = chosenSuffix(i);
+        var who = whoFor(i), info = numberInfo.prefixes[who];
+        var sent = !!$p.data('sent') || (sketchesOf(q).length <= 1 && (q.proofVersion || 0) > 0);
         var base;
-        if (cur && (!info || cur.slice(0, 2) === info.prefix || proofsSent)) base = cur;
+        if (cur && (!info || cur.slice(0, 2) === info.prefix || sent)) base = cur;
         else base = info ? info.prefix + '####' : '??####';
+        if (cur && info && cur.slice(0, 2) !== info.prefix) { if (sent) kept++; else changes++; }
+        if (info) teams[who] = info;
         $p.text(base + '_' + (suf || '??'));
     });
-    var msg = '';
+    var names = Object.keys(teams), msg = '';
     if (!$('.js-num-preview').length) msg = '';
-    else if (info) {
-        var changes = $('.js-num-preview').filter(function () { var c = $(this).data('cur') || ''; return c && c.slice(0, 2) !== info.prefix; }).length;
-        msg = esc(who) + '’s work is numbered <b>' + esc(info.prefix) + '</b> (' + esc(info.team) + '). The next ' + esc(info.prefix) + ' number is given when you assign.';
-        if (changes && !proofsSent) msg += ' The current number will be replaced with a new ' + esc(info.prefix) + ' number.';
-        if (changes && proofsSent) msg += ' Proofs already went out, so the current number stays.';
-    } else msg = 'Choose who works on this to see the art #.';
+    else if (names.length) {
+        msg = names.map(function (n) { return esc(n) + '’s work is numbered <b>' + esc(teams[n].prefix) + '</b> (' + esc(teams[n].team) + ')'; }).join('; ') +
+            '. The next number is given when you assign.';
+        if (changes) msg += ' A current number from another team will be replaced.';
+        if (kept) msg += ' Proofs already went out on some, so their number stays.';
+    } else msg = 'Choose who works on ' + (sketchesOf(q).length > 1 ? 'each sketch' : 'this') + ' to see the art #.';
     msg += (msg ? ' ' : '') + 'XX = not licensed. Anything else goes to licensing after the store approves the proofs.';
     $('.js-num-team').html(msg);
 }
@@ -958,12 +1083,12 @@ function approvalHtml(d) {
     var a = list[list.length - 1];
     var h = '<div class="approval"><div class="lbl">✓ Store approval</div>' +
         '<div><b>' + esc(a.name) + '</b> · ' + esc(a.store) + ' · ' + esc(a.date) + '</div>' +
-        '<div class="sub">Proof v' + esc(a.version) + ' · ' + esc(a.via) + (a.recordedBy ? ' (recorded by ' + esc(a.recordedBy) + ')' : '') + (a.checked ? ' · checklist confirmed' : '') + '</div>' +
+        '<div class="sub">' + (a.sketches && (d.sketches || []).length > 1 ? esc(skLabel(a.sketches.map(function (n) { return { number: n }; }))) + ' · ' : '') + 'Proof v' + esc(a.version) + ' · ' + esc(a.via) + (a.recordedBy ? ' (recorded by ' + esc(a.recordedBy) + ')' : '') + (a.checked ? ' · checklist confirmed' : '') + '</div>' +
         (a.files && a.files.length ? '<div class="sub">' + a.files.map(fileLink).join(' · ') + '</div>' : '');
     if (list.length > 1) {
         h += '<details class="older"><summary>Earlier approvals (' + (list.length - 1) + ')</summary><ul>' +
             list.slice(0, -1).reverse().map(function (x) {
-                return '<li>v' + esc(x.version) + ': ' + esc(x.name) + ', ' + esc(x.store) + ', ' + esc(x.date) + '</li>';
+                return '<li>' + (x.sketches && (d.sketches || []).length > 1 ? esc(skLabel(x.sketches.map(function (n) { return { number: n }; }))) + ', ' : '') + 'v' + esc(x.version) + ': ' + esc(x.name) + ', ' + esc(x.store) + ', ' + esc(x.date) + '</li>';
             }).join('') + '</ul></details>';
     }
     return h + '</div>';

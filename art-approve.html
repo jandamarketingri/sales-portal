@@ -43,6 +43,14 @@
             font: inherit; font-size: 15px; color: var(--text); background: var(--surface); outline: none; }
         input:focus, textarea:focus { border-color: var(--accent); }
         textarea { min-height: 96px; resize: vertical; }
+        .sk-hd { font-weight: 700; font-size: 14px; margin: 12px 0 6px; }
+        .sk-hd:first-of-type { margin-top: 4px; }
+        .stg { font-size: 11.5px; font-weight: 700; border-radius: 10px; padding: 1px 8px; margin-left: 6px; background: #eef0f3; color: #555; }
+        .stg.wait { background: #fff1cc; color: #7a4b00; }
+        .stg.ok { background: #e3f4e8; color: #1d6b3a; }
+        .picks { border: 1.5px solid var(--border); border-radius: 8px; padding: 12px 14px; margin-bottom: 14px; }
+        .picks .hd { font-size: 14px; font-weight: 700; margin-bottom: 8px; }
+        .picks label { display: flex; gap: 10px; align-items: center; font-size: 14px; font-weight: 500; margin: 0 0 6px; cursor: pointer; }
         .checks { display: none; border: 1.5px solid #f0d58c; background: #fff8e1; border-radius: 8px; padding: 12px 14px; margin-bottom: 14px; }
         .checks .hd { font-size: 14px; font-weight: 700; margin-bottom: 8px; color: #7a4b00; }
         .checks label { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; font-weight: 500; color: var(--text); margin: 0 0 8px; cursor: pointer; }
@@ -121,13 +129,28 @@ function render(q, open, closedMsg) {
         '<div class="title" style="margin-top:4px;">' + esc(q.title) + '</div>' +
         '<div class="sub">' + esc(q.account) + (q.institution ? ' · ' + esc(q.institution) : '') + ' · Rep: ' + esc(q.repName) + '</div></div>';
 
-    h += '<div class="card"><h2>🖼️ Proofs</h2>' + (q.proofNote ? '<div class="note">' + esc(q.proofNote) + '</div>' : '');
-    if (q.proofs.length) {
-        h += '<div class="proofs">' + q.proofs.map(function (f) {
+    // Sketch by sketch (Nov 2026): proofs come in per sketch, so show the ones waiting now.
+    var multi = (q.sketches || []).length > 1 && (q.sketches || []).some(function (s) { return s.waiting !== undefined; });
+    var thumbs = function (files) {
+        return '<div class="proofs">' + files.map(function (f) {
             return '<a class="proof" href="' + esc(f.url) + '" target="_blank" rel="noopener"><div class="th">' +
                 '<img src="https://drive.google.com/thumbnail?id=' + encodeURIComponent(f.id) + '&sz=w800" alt="" onerror="this.parentNode.innerHTML=\'📄\'"></div>' +
                 '<div class="nm">' + esc(f.name) + '</div></a>';
-        }).join('') + '</div><div class="hint">Tap a proof to open it full size. The proofs are also attached to the email you received.</div>';
+        }).join('') + '</div>';
+    };
+    h += '<div class="card"><h2>🖼️ Proofs' + (multi ? ' to review now' : '') + '</h2>' + (q.proofNote ? '<div class="note">' + esc(q.proofNote) + '</div>' : '');
+    if (multi) {
+        var waitingSk = q.sketches.filter(function (s) { return s.waiting; });
+        var rest = q.sketches.filter(function (s) { return !s.waiting && s.stage !== 'Approved' && s.stage !== 'Licensing'; });
+        waitingSk.forEach(function (s) {
+            h += '<div class="sk-hd">Sketch ' + s.number + (s.proofVersion ? ' · Proof v' + esc(s.proofVersion) : '') + '</div>' +
+                (s.proofs.length ? thumbs(s.proofs) : '<div class="hint">The proof file is attached to the email you received.</div>');
+        });
+        h += '<div class="hint">Tap a proof to open it full size. The proofs are also attached to the email you received.</div>';
+        if (rest.length) h += '<div class="hint" style="margin-top:8px;">Still being designed: ' + esc(rest.map(function (s) { return 'Sketch ' + s.number; }).join(', ')) +
+            '. You’ll get a separate email when ' + (rest.length === 1 ? 'its proof is' : 'their proofs are') + ' ready.</div>';
+    } else if (q.proofs.length) {
+        h += thumbs(q.proofs) + '<div class="hint">Tap a proof to open it full size. The proofs are also attached to the email you received.</div>';
     } else {
         h += '<div class="hint">The proof files are attached to the email you received.</div>';
     }
@@ -135,8 +158,8 @@ function render(q, open, closedMsg) {
 
     if (q.sketches.length) {
         h += '<div class="card"><h2>📋 What’s being printed</h2>' + q.sketches.map(function (s, i) {
-            return '<div class="sk"><div style="font-weight:600;margin-bottom:6px;">Sketch ' + (i + 1) +
-                (s.artNumber ? ' <span style="font-family:\'DM Mono\',monospace;font-weight:600;font-size:12.5px;color:#4a2a75;background:#f3ecfa;border-radius:5px;padding:1px 7px;margin-left:4px;">Art # ' + esc(s.artNumber) + '</span>' : '') +
+            var badge = multi ? (s.waiting ? ' <span class="stg wait">Waiting for you</span>' : s.stage === 'Approved' || s.stage === 'Licensing' ? ' <span class="stg ok">Approved</span>' : ' <span class="stg">In design</span>') : '';
+            return '<div class="sk"><div style="font-weight:600;margin-bottom:6px;">Sketch ' + (s.number || i + 1) + badge +                (s.artNumber ? ' <span style="font-family:\'DM Mono\',monospace;font-weight:600;font-size:12.5px;color:#4a2a75;background:#f3ecfa;border-radius:5px;padding:1px 7px;margin-left:4px;">Art # ' + esc(s.artNumber) + '</span>' : '') +
                 (s.inkChange ? ' <span style="font-size:12px;font-weight:700;color:#1f3d63;background:#e6f0fb;border-radius:10px;padding:1px 8px;margin-left:4px;">' +
                     (s.variant ? 'Variant ' + s.variant : 'New variant') + '</span> <span style="font-weight:400;font-size:12.5px;color:var(--text-muted);">same art, new ink colors</span>' : '') +
                 (s.basedOn && s.basedOn !== s.artNumber ? ' <span style="font-weight:400;font-size:12.5px;color:var(--text-muted);">based on ' + esc(s.basedOn) + '</span>' : '') + '</div>' +
@@ -174,6 +197,10 @@ function render(q, open, closedMsg) {
           '<label>Your name<input type="text" id="bName" maxlength="80" autocomplete="name"></label>' +
           '<label>Store / location<input type="text" id="bStore" maxlength="120" value="' + esc(q.institution || '') + '"></label>' +
         '</div>' +
+        (multi && q.sketches.filter(function (s) { return s.waiting; }).length > 1 ? '<div class="picks"><div class="hd">Which sketches is this for?</div>' +
+            q.sketches.filter(function (s) { return s.waiting; }).map(function (s) {
+                return '<label><input type="checkbox" class="skp" value="' + s.number + '" checked><span>Sketch ' + s.number + (s.artNumber ? ' · ' + esc(s.artNumber) : '') + '</span></label>';
+            }).join('') + '<div class="hint" style="margin-top:2px;">Untick a sketch to answer it separately, e.g. approve two and ask for changes on one.</div></div>' : '') +
         '<div class="choice"><button type="button" data-d="approve">✓ Approve</button><button type="button" data-d="revise">✎ Request changes</button></div>' +
         '<div class="checks" id="checks"><div class="hd">Before you approve, please check each item:</div>' + (q.checks || APPROVAL_CHECKS).map(function (c, i) {
             return '<label><input type="checkbox" class="chk" data-i="' + i + '"><span>' + esc(c) + '</span></label>';
@@ -218,10 +245,14 @@ function submit() {
     if (!store) return fail('Enter your store or location.', 'bStore');
     if (decision === 'revise' && !msg) return fail('Describe what needs to change.', 'bMsg');
     if (decision === 'approve' && !allChecked()) return fail('Please check every item in the yellow box before approving.');
-    if (decision === 'approve' && !confirm('Approve these proofs for ' + store + '?')) return;
+    var picks = Array.prototype.map.call(document.querySelectorAll('.skp'), function (x) { return x; });
+    var chosen = picks.filter(function (x) { return x.checked; }).map(function (x) { return +x.value; });
+    if (picks.length && !chosen.length) return fail('Tick at least one sketch.');
+    var what = picks.length ? (chosen.length === 1 ? 'sketch ' + chosen[0] : 'sketches ' + chosen.join(', ')) : 'these proofs';
+    if (decision === 'approve' && !confirm('Approve ' + what + ' for ' + store + '?')) return;
     var btn = document.getElementById('send');
     btn.disabled = true; btn.textContent = 'Sending…';
-    api('POST', { action: 'artBuyerRespond', id: REQ_ID, k: KEY, decision: decision, name: name, store: store, message: msg, confirmed: decision === 'approve' && allChecked() })
+    api('POST', { action: 'artBuyerRespond', id: REQ_ID, k: KEY, decision: decision, name: name, store: store, message: msg, sketches: chosen, confirmed: decision === 'approve' && allChecked() })
         .then(function (r) {
             if (!r || !r.success) {
                 btn.disabled = false; btn.textContent = decision === 'approve' ? 'Approve these proofs' : 'Send my changes';

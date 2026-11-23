@@ -332,7 +332,7 @@ function catalogArtFor(key) {
  * or a catalog design's pictures. The server checks each one before attaching it. */
 function artFileRef(a) {
     if (!a) return null;
-    if (a.requestId) return { kind: 'request', id: a.requestId };
+    if (a.requestId) return { kind: 'request', id: a.requestId, sketch: a.sketch || 0 };
     if (a.source === 'catalog') return { kind: 'catalog', paths: (a.img || []).slice(0, 3) };
     if (a.thumbId) return { kind: 'library', id: a.thumbId };
     return null;
