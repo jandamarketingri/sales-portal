@@ -661,7 +661,7 @@ function actionsHtml(q, buckets) {
         var allProofed = proofable.every(function (s) { return s.stage === 'Proof Ready'; });
         blocks.push('<div class="action-block"><div class="lbl">' + (allProofed ? 'Send a corrected proof' : 'Send proofs to the rep') + '</div>' +
             (proofable.length > 1 || sketchesOf(q).length > 1 ? '<div class="hint">Which sketch' + (proofable.length > 1 ? 'es are' : ' is') + ' in these files? Send each sketch as soon as it’s ready; you don’t have to wait for the others.</div>' : '') +
-            skPicks('proof', proofable, function (s) { return s.stage === 'Proof Ready'; }) +
+            skPicks('proof', proofable, function (s) { return s.stage === 'Proof Ready' || ((q.mySketches || []).length && (q.mySketches || []).indexOf(s.number) === -1); }) +
             '<div class="file-drop" id="proofDrop"><button type="button" class="btn-secondary btn-sm js-pick">📎 Choose proof files</button><span class="hint" style="margin:0;">PDF, JPG or PNG only (no .ai, .eps, .psd or .svg), up to ' + MAX_FILE_MB + ' MB each</span><input type="file" multiple hidden accept=".pdf,.jpg,.jpeg,.png,.gif,.webp"><div class="file-list"></div></div>' +
             '<textarea id="proofMsg" placeholder="Note to the rep (optional). Your name isn’t shown, emails come from the Art Department."></textarea>' +
             '<button class="btn-primary" data-op="proof" data-msg="#proofMsg" data-files="#proofDrop">Send proofs</button></div>');
