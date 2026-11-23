@@ -57,8 +57,9 @@ function requireAuth() {
     try {
         var auth = JSON.parse(authData);
         var isAdmin = auth.role === 'Admin';
+        var isSupport = /^(sales )?support$/i.test(String(auth.role || '').trim());
         var programs = auth.programs || [];
-        if (!isAdmin && programs.indexOf('NEXCOM') === -1) {
+        if (!isAdmin && !isSupport && programs.indexOf('NEXCOM') === -1) {
             window.location.href = 'index.html';
             return null;
         }
@@ -1326,6 +1327,8 @@ function submitOrder() {
         repName: $('#repName').val(),
         repEmail: $('#repEmail').val(),
         repNumber: authData.repNumber || '',
+        // Sales Support: the rep this order is for (nexcom-locations.js). Saved under that rep.
+        onBehalfOf: (window.NexcomLocations && NexcomLocations.orderingFor) ? NexcomLocations.orderingFor() : '',
         facilityId: $('#facilityId').val(),
         locationName: $('#locationName').val(),
         beginShipDate: $('#beginShipDate').val(),
@@ -1365,7 +1368,9 @@ function submitOrder() {
                 return;
             }
             alert('✅ Order submitted!\n\nPO Number: ' + r.poNumber + '\nStore: ' + (r.store || '') +
-                  '\nTotal items: ' + totalItems + '\n\nA confirmation email is on its way to ' + orderData.repEmail + '.');
+                  (orderData.onBehalfOf ? '\nFor: ' + (r.repName || orderData.repName) : '') +
+                  '\nTotal items: ' + totalItems + '\n\nA confirmation email is on its way to ' + (r.repEmail || orderData.repEmail) +
+                  (orderData.onBehalfOf ? ' (you’re copied)' : '') + '.');
             cart = [];
             updateCartBadge();
             closeCart();

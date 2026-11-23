@@ -393,11 +393,12 @@ function loadList(reset) {
 function renderListShell(r) {
     var artistOnly = !!r.user.isArtistOnly;
     var staff = r.user.isStaff && !artistOnly;
+    var support = !!r.user.isSupport && !staff;   // Sales Support: sees every request, doesn't submit them
     var h = '<div class="page-head"><div>' +
         '<div class="page-title">🎨 Art Requests</div>' +
-        '<div class="page-subtitle">' + (artistOnly ? 'Art requests assigned to you, newest activity first.' : staff ? 'Every NEXCOM art request, newest activity first.' : 'Your NEXCOM art requests, newest activity first.') + '</div></div>' +
+        '<div class="page-subtitle">' + (artistOnly ? 'Art requests assigned to you, newest activity first.' : (staff || support) ? 'Every NEXCOM art request, newest activity first.' : 'Your NEXCOM art requests, newest activity first.') + '</div></div>' +
         '<div class="btn-row">' + (r.user.isArtAdmin ? '<a class="btn-secondary" href="art-board.html">📊 Art Board</a>' : '') +
-        (artistOnly ? '' : '<a class="btn-primary" href="art-request.html">+ New request</a>') + '</div></div>';
+        (artistOnly || support ? '' : '<a class="btn-primary" href="art-request.html">+ New request</a>') + '</div></div>';
     h += '<div class="tabs" id="tabs"></div>';
     h += '<div class="filters">' +
         '<input type="text" id="search" placeholder="Search by ID, art #, project, rep, institution…" value="' + esc(list.q) + '">';
@@ -437,7 +438,7 @@ function updateTabs(r) {
     var tabs = [{ s: 'open', label: 'Open', n: r.openCount }];
     TABS.forEach(function (s) { if (r.counts[s] || ['Ordered', 'Cancelled'].indexOf(s) === -1) tabs.push({ s: s, label: s, n: r.counts[s] || 0 }); });
     tabs.push({ s: 'all', label: 'All', n: null });
-    var myTurn = { 'Proof Ready': !r.user.isStaff, 'Ready to Order': !r.user.isStaff, 'Submitted': r.user.isArtAdmin, 'In Art': !!r.user.isArtistOnly, 'Revise': !!r.user.isArtistOnly, 'Licensing': r.user.isArtAdmin || r.user.isLicensing };
+    var myTurn = { 'Proof Ready': !r.user.isStaff && !r.user.isSupport, 'Ready to Order': !r.user.isStaff && !r.user.isSupport, 'Submitted': r.user.isArtAdmin, 'In Art': !!r.user.isArtistOnly, 'Revise': !!r.user.isArtistOnly, 'Licensing': r.user.isArtAdmin || r.user.isLicensing };
     $('#tabs').html(tabs.map(function (t) {
         return '<button class="tab' + (t.s === list.status ? ' active' : '') + (myTurn[t.s] && t.n ? ' mine-turn' : '') + '" data-status="' + esc(t.s) + '">' +
             esc(t.label) + (t.n !== null ? '<span class="count">' + t.n + '</span>' : '') + '</button>';
@@ -452,7 +453,7 @@ function cardHtml(it) {
         '<div class="req-title" style="margin-top:4px;">' + esc(it.title) + '</div>' +
         '<div class="req-meta"><span>' + esc(it.account) + '</span>' + (it.institution ? '<span>' + esc(it.institution) + '</span>' : '') +
         '<span>' + it.sketchCount + ' sketch' + (it.sketchCount == 1 ? '' : 'es') + '</span>' +
-        (me.isStaff ? '<span>Rep: ' + esc(it.repName) + '</span>' : '') +
+        (me.isStaff || me.isSupport ? '<span>Rep: ' + esc(it.repName) + '</span>' : '') +
         (me.isStaff && it.assignedTo ? '<span>→ ' + esc(it.assignedTo) + '</span>' : '') + '</div></div>' +
         '<div class="req-right"><span class="waiting' + (w.me ? ' me' : '') + '">' + (w.me ? '● ' : '') + esc(w.who) + '</span>' +
         '<span class="waiting">Updated ' + esc(fmtDate(it.updated)) + (it.proofsDue && ['Submitted', 'In Art', 'Revise'].indexOf(it.status) !== -1 ? ' · Proofs due ' + esc(it.proofsDue) : '') + '</span></div></a>';
@@ -595,7 +596,7 @@ function actionsHtml(q, buckets) {
     var st = q.status, mine = q.isMine, blocks = [];
     var closed = ['Ordered', 'Cancelled'].indexOf(st) !== -1;
 
-    if ((mine || me.isAdmin) && st === 'Proof Ready' && q.buyerLink) {
+    if ((mine || me.isAdmin || me.isSupport) && st === 'Proof Ready' && q.buyerLink) {
         blocks.push('<div class="action-block"><div class="lbl">Buyer approval link</div>' +
             '<div class="hint">Send this to your buyer. They can approve or ask for changes without logging in, and you’ll get an email when they do. ' +
             'It’s also in the proof email, so forwarding that works too.</div>' +
@@ -690,7 +691,7 @@ function actionsHtml(q, buckets) {
     }
     if (!closed) {
         blocks.push('<div class="action-block"><div class="lbl">Comment</div>' +
-            '<textarea id="commentMsg" placeholder="' + (me.isStaff ? 'Question or note for the rep…' : 'Question or note for the art department…') + '"></textarea>' +
+            '<textarea id="commentMsg" placeholder="' + (me.isStaff ? 'Question or note for the rep…' : me.isSupport && !q.isMine ? 'Note for the rep and the art department (both are emailed)…' : 'Question or note for the art department…') + '"></textarea>' +
             '<div class="file-drop" id="commentDrop" style="padding:6px 10px;"><button type="button" class="btn-secondary btn-sm js-pick">📎 Attach</button><input type="file" multiple hidden><div class="file-list"></div></div>' +
             '<button class="btn-secondary" data-op="comment" data-msg="#commentMsg" data-files="#commentDrop">Add comment</button></div>');
     }

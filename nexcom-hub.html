@@ -190,6 +190,8 @@ $(document).ready(function(){
             '</div>';
 
         $('body').append(userInfo);
+        // Sales Support enters orders for reps but doesn't submit art requests.
+        if (/^(sales )?support$/i.test(String(auth.role || '').trim())) $('a.nav-card[href="art-request.html"]').remove();
         loadArtTurnCount(auth);
 
     } catch(e){
@@ -215,7 +217,8 @@ function loadArtTurnCount(auth) {
         else if (u.isLicensing) { add('Licensing', 'in licensing'); }
         else { add('Proof Ready', 'proof' + (c['Proof Ready'] === 1 ? '' : 's') + ' to review'); add('Ready to Order', 'ready to order'); }
         if (u.isArtAdmin) $('#artBoardCard').show();
-        if (u.isStaff) $('#artBadge').closest('.nav-card').find('h2').text('Art Requests');
+        if (u.isStaff || u.isSupport) $('#artBadge').closest('.nav-card').find('h2').text('Art Requests');
+        if (u.isSupport && !u.isAdmin) $('a.nav-card[href="art-request.html"]').remove();   // reps submit art requests
         if (n) {
             $('#artBadge').text(n).show();
             $('#artTurnNote').text('Waiting on you: ' + parts.join(', ')).show();

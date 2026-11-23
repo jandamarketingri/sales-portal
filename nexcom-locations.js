@@ -17,6 +17,11 @@
  *     #locationName with the store name, so nexcom-order.js keeps working.
  *   - Blocks submitOrder() unless a store has been picked from the list.
  *
+ * Sales Support (role "Sales Support" on the login sheet, Nov 2026): gets every
+ * store from the NEXCOM script (action nxSupportSetup) and an "Ordering for"
+ * list of reps in place of the name/email fields. Picking a store picks its
+ * assigned rep. The order is saved under that rep (NexcomOrders.gs).
+ *
  * Config (optional, in window.NEXCOM_CONFIG):
  *   locationsUrl — endpoint to call. Defaults to the auth relay below
  *                  (the same relay login.html uses).
@@ -32,7 +37,12 @@
     var cfg = window.NEXCOM_CONFIG || {};
     var locationsUrl = cfg.locationsUrl || DEFAULT_SCRIPT_URL;
 
+    var NEXCOM_URL = cfg.orderSubmissionUrl || (DEFAULT_SCRIPT_URL + '/nexcom');
     var state = {
+        support: false,
+        reps: [],
+        repByEmail: {},
+        orderingFor: '',
         locations: [],
         byShipTo: {},
         isAdmin: false,
@@ -55,6 +65,7 @@
         try { return JSON.parse(sessionStorage.getItem('salesPortalAuth')) || null; }
         catch (e) { return null; }
     }
+    function isSupportRole(auth) { return /^(sales )?support$/i.test(String((auth && auth.role) || '').trim()); }
     function cityLine(loc) {
         return [loc.city, loc.state].filter(Boolean).join(', ');
     }
@@ -153,6 +164,10 @@
         '.rep-info-bar .loc-field .loc-combo,.rep-info-bar .loc-field .loc-option,.rep-info-bar .loc-field .loc-option div,.rep-info-bar .loc-field .loc-empty,.rep-info-bar .loc-field .loc-status{display:block}' +
         '.rep-info-bar .loc-field .loc-dropdown{display:none}' +
         '.rep-info-bar .loc-field .loc-dropdown.open{display:block}' +
+        '.rep-info-bar .rep-for select{width:100%;box-sizing:border-box;padding:8px;border:1px solid #ddd;border-radius:5px;background:#fff;font-size:15px;font-family:inherit;min-height:44px}' +
+        '.rep-for{display:flex;flex-direction:column}' +
+        '.rep-for .rep-for-note{font-size:11.5px;color:#666;margin-top:4px;line-height:1.35}' +
+        '.rep-for .rep-for-note.warn{color:#8a6200}' +
         '.loc-admin-tag{display:inline-block;margin-left:6px;padding:1px 6px;border-radius:8px;background:#fff3cd;color:#8a6200;font-size:10px;font-weight:700;text-transform:none}';
 
     var $input, $dropdown, $status, $combo, $facilityId, $locationName;
@@ -228,6 +243,43 @@
             if (loc) select(loc);
         });
         return true;
+    }
+
+    // ---------- Sales Support: who the order is for ----------
+    var $repSel, $repNote;
+    function buildRepPicker() {
+        var $nameWrap = $('#repName').closest('div'), $emailWrap = $('#repEmail').closest('div');
+        $nameWrap.hide(); $emailWrap.hide();
+        $('#repName, #repEmail').val('');
+        var $f = $('<div class="rep-for"><label for="repFor">Ordering for (rep) *</label>' +
+            '<select id="repFor"><option value="">Loading reps…</option></select>' +
+            '<div class="rep-for-note">Pick a store and its rep is filled in.</div></div>');
+        $f.insertBefore($nameWrap);
+        $repSel = $f.find('select'); $repNote = $f.find('.rep-for-note');
+        $repSel.on('change', function () { setRep(this.value, true); });
+        $(document).on('nexcom:locationSelected', function (e, loc) {
+            var assigned = (loc.repEmails || []).filter(function (em) { return state.repByEmail[em]; });
+            if (assigned.length && assigned.indexOf(state.orderingFor) === -1) setRep(assigned[0]);
+            else setRep(state.orderingFor);
+        });
+    }
+    function setRep(email, byHand) {
+        var r = state.repByEmail[email] || null;
+        state.orderingFor = r ? r.email : '';
+        $repSel.val(state.orderingFor);
+        $('#repName').val(r ? r.name : '');
+        $('#repEmail').val(r ? r.email : '');
+        var loc = state.selected, assigned = loc ? (loc.repEmails || []) : [];
+        var note = '', warn = false;
+        if (!r) note = loc && !assigned.length ? 'No rep is assigned to this store. Pick who the order is for.' : 'Pick who the order is for.';
+        else {
+            note = 'Saved under ' + r.name + '. They get the confirmation email and you’re copied.';
+            if (loc && assigned.length && assigned.indexOf(r.email) === -1) {
+                warn = true;
+                note = r.name + ' isn’t assigned to ' + loc.name + ' (' + assigned.map(function (em) { return (state.repByEmail[em] || { name: em }).name; }).join(', ') + ' is). ' + note;
+            } else if (loc && assigned.length > 1 && !byHand) note = loc.name + ' has ' + assigned.length + ' reps; check this is the right one. ' + note;
+        }
+        $repNote.text(note).toggleClass('warn', warn);
     }
 
     function onKeyDown(e) {
@@ -329,6 +381,7 @@
             $input.attr('placeholder', 'Log in again to see your stores');
             return;
         }
+        if (state.support) return loadSupport(auth);
         $.ajax({
             url: locationsUrl,
             method: 'GET',
@@ -336,13 +389,28 @@
             dataType: 'json',
             timeout: 20000,
             data: { action: 'getMyLocations', email: auth.email, token: auth.token || '' }
-        }).done(function (resp) {
+        }).done(function (resp) { gotLocations(resp, auth); }).fail(function () {
+            setStatus('Could not reach the server to load your stores. Refresh to try again.', 'err');
+            $input.attr('placeholder', 'Stores unavailable');
+        });
+    }
+
+    function gotLocations(resp, auth) {
             if (!resp || !resp.success) {
                 setStatus((resp && resp.message) || 'Could not load your stores.', 'err');
                 $input.attr('placeholder', 'Stores unavailable');
                 return;
             }
-            state.isAdmin = !!resp.isAdmin;
+            state.isAdmin = !!resp.isAdmin || state.support;   // show each store's reps
+            if (state.support) {
+                state.reps = resp.reps || [];
+                state.repByEmail = {};
+                state.reps.forEach(function (r) { state.repByEmail[r.email] = r; });
+                $repSel.html('<option value="">Choose the rep…</option>' + state.reps.map(function (r) {
+                    return '<option value="' + esc(r.email) + '">' + esc(r.name) + '</option>';
+                }).join(''));
+                $('.loc-admin-tag').text('Sales Support: all stores');
+            }
             state.locations = (resp.locations || []).map(function (loc) {
                 loc.shipTo = String(loc.shipTo);
                 loc._name = norm(loc.name);
@@ -369,10 +437,16 @@
             } else {
                 setStatus(state.locations.length + ' stores available to you.', '');
             }
-        }).fail(function () {
-            setStatus('Could not reach the server to load your stores. Refresh to try again.', 'err');
-            $input.attr('placeholder', 'Stores unavailable');
-        });
+    }
+
+    function loadSupport(auth) {
+        fetch(NEXCOM_URL, { method: 'POST', body: JSON.stringify({ action: 'nxSupportSetup', email: auth.email, token: auth.token || '' }) })
+            .then(function (r) { return r.json(); })
+            .then(function (resp) { gotLocations(resp, auth); })
+            .catch(function () {
+                setStatus('Could not reach the server to load the stores. Refresh to try again.', 'err');
+                $input.attr('placeholder', 'Stores unavailable');
+            });
     }
 
     // ---------- submit guard ----------
@@ -389,6 +463,12 @@
                 $input.addClass('invalid').focus();
                 return;
             }
+            if (state.support && !state.orderingFor) {
+                alert('Pick which rep this order is for (“Ordering for”) before submitting.');
+                if (typeof window.closeCart === 'function') window.closeCart();
+                $repSel.focus();
+                return;
+            }
             return original.apply(this, arguments);
         };
         guarded.__locGuarded = true;
@@ -398,6 +478,8 @@
     // Public hooks for nexcom-order.js (optional)
     window.NexcomLocations = {
         getSelected: function () { return state.selected; },
+        /** Sales Support: the rep's email the order is for ('' for everyone else). */
+        orderingFor: function () { return state.support ? state.orderingFor : ''; },
         isLoaded: function () { return state.loaded; },
         /** Pick a store by ship-to (e.g. from a saved cart). Waits for the list if it's still loading;
          *  ignored if the store isn't on this person's list. */
@@ -412,6 +494,8 @@
 
     $(function () {
         if (!buildUI()) return;
+        state.support = isSupportRole(getAuth());
+        if (state.support) buildRepPicker();
         guardSubmit();
         loadLocations();
     });

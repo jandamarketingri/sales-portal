@@ -295,7 +295,8 @@ $(document).ready(function(){
         // Admins see everything regardless of the Programs column.
         var programs = auth.programs || [];
         var hasAAFES = aafesAllowed(auth);   // aafes-switch.js: hidden from reps until go-live
-        var hasNEXCOM = isAdmin || programs.indexOf('NEXCOM') !== -1;
+        var isSupport = role === 'sales support' || role === 'support';
+        var hasNEXCOM = isAdmin || isSupport || programs.indexOf('NEXCOM') !== -1;
 
         if (!hasAAFES) $('#aafesCard').remove();
         if (!hasNEXCOM) $('#nexcomCard').remove();
